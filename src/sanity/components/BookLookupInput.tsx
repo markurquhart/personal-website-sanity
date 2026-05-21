@@ -260,7 +260,13 @@ export function BookLookupInput(_props: StringInputProps) {
         ];
       }
 
-      await client.patch(docId).set(patches).commit();
+      // The document might not exist yet on the server (new unsaved draft) —
+      // bootstrap it first, then patch.
+      await client
+        .transaction()
+        .createIfNotExists({ _id: docId, _type: "book" })
+        .patch(docId, (p) => p.set(patches))
+        .commit();
       setImportedTitle(info.title || v.id);
       setResults([]);
       setQuery("");
@@ -284,7 +290,7 @@ export function BookLookupInput(_props: StringInputProps) {
         <Stack space={3}>
           <Text size={1} muted>
             Search Google Books to autofill title, authors, cover, ISBN, page
-            count, and published year. Save the document first if you haven&apos;t.
+            count, genres, and published year.
           </Text>
           <Flex gap={2}>
             <Box flex={1}>
