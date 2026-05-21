@@ -19,68 +19,10 @@ import {
   type ObjectInputProps,
 } from "sanity";
 
-// Validate the blob decodes as an image before sending to Sanity. Catches
-// truncated downloads, HTML error pages mislabeled as images, etc.
-async function validateImageBlob(blob: Blob): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      const ok = img.naturalWidth > 0 && img.naturalHeight > 0;
-      URL.revokeObjectURL(url);
-      ok ? resolve() : reject(new Error("Image decoded to 0×0 — corrupt"));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Image failed to decode (not a valid image)"));
-    };
-    img.src = url;
-  });
-}
-
-// The real source of the "stuck loading" bug: client.assets.upload resolves
-// when the asset doc exists, but Sanity still has work to do — generate the
-// LQIP/metadata, and process on-demand transformations for the URLs Studio
-// uses in image previews (e.g., ?w=200&h=300&fit=crop). If we patch the
-// cover reference before all of that is ready, Studio re-mounts the form
-// (via its realtime listener), the image component re-fetches a transformed
-// URL with a cold CDN cache, and the preview hangs on "Loading".
-//
-// This helper:
-//   1) polls the asset doc until metadata.lqip is populated (= Sanity finished
-//      processing)
-//   2) pre-warms common transformed URLs so the CDN has them cached before
-//      Studio asks
-async function waitForAssetReady(
-  client: ReturnType<typeof useClient>,
-  assetId: string,
-): Promise<string | null> {
-  for (let i = 0; i < 20; i++) {
-    const fresh = await client.fetch<{
-      url?: string;
-      metadata?: { lqip?: string };
-    } | null>(`*[_id == $id][0]{ url, metadata }`, { id: assetId });
-
-    if (fresh?.url && fresh?.metadata?.lqip) {
-      // Pre-warm common preview URLs so Studio's first render after patch
-      // doesn't hit a cold cache.
-      await Promise.allSettled([
-        fetch(fresh.url, { method: "HEAD", cache: "no-store" }),
-        fetch(`${fresh.url}?w=200&h=300&fit=crop`, {
-          method: "HEAD",
-          cache: "no-store",
-        }),
-        fetch(`${fresh.url}?w=400&h=600&fit=crop`, {
-          method: "HEAD",
-          cache: "no-store",
-        }),
-      ]);
-      return fresh.url;
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return null;
-}
+import {
+  fetchCoverFromUrl,
+  uploadAndWaitForReady,
+} from "./bookCoverHelpers";
 
 type Candidate = {
   id: string;
@@ -229,50 +171,23 @@ export function BookCoverInput(props: ObjectInputProps) {
     setError(null);
     setStage(null);
     try {
-      // 1) Fetch image bytes via proxy
       setStage("Downloading cover…");
-      const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(c.fullUrl)}`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      let res: Response;
-      try {
-        res = await fetch(proxyUrl, { signal: controller.signal });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+      const blob = await fetchCoverFromUrl(c.fullUrl);
 
-      // 2) Validate
-      const blob = await res.blob();
-      if (blob.size < 1000) throw new Error("Cover image looks empty");
-      if (!blob.type.startsWith("image/"))
-        throw new Error(`Got non-image response (${blob.type})`);
-      await validateImageBlob(blob);
-
-      // 3) Upload to Sanity
       setStage("Uploading to Sanity…");
-      const asset = await client.assets.upload("image", blob, {
-        filename: `cover-${c.id}.jpg`,
-      });
+      const assetId = await uploadAndWaitForReady(
+        client,
+        blob,
+        `cover-${c.id}.jpg`,
+      );
 
-      // 4) Wait for Sanity to fully process the asset + pre-warm CDN cache
-      // for the transformed URLs Studio uses in image previews.
-      setStage("Processing on Sanity…");
-      const ready = await waitForAssetReady(client, asset._id);
-      if (!ready) {
-        throw new Error(
-          "Sanity took too long to process the image. Try again in a moment.",
-        );
-      }
-
-      // 5) Patch the cover field (now safe — URL is live)
       setStage("Saving…");
       docOp.patch.execute([
         {
           set: {
             cover: {
               _type: "image",
-              asset: { _type: "reference", _ref: asset._id },
+              asset: { _type: "reference", _ref: assetId },
               alt: title || "",
             },
           },
@@ -295,13 +210,24 @@ export function BookCoverInput(props: ObjectInputProps) {
     }
   };
 
+  // Show different button text depending on whether the book already has
+  // a cover (set via Lookup or manual upload).
+  const hasCover = Boolean(
+    (props.value as { asset?: { _ref?: string } } | undefined)?.asset?._ref,
+  );
+  const buttonText = open
+    ? "Refresh covers"
+    : hasCover
+      ? "Find more covers"
+      : "Search for covers";
+
   return (
     <Stack space={3}>
       <Flex justify="flex-end">
         <Button
           mode="ghost"
           icon={open ? RefreshIcon : ImagesIcon}
-          text={open ? "Refresh covers" : "Find alternate covers"}
+          text={buttonText}
           fontSize={1}
           padding={2}
           onClick={() => {

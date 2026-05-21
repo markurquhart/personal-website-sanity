@@ -13,10 +13,16 @@ import {
 } from "@sanity/ui";
 import { useCallback, useState } from "react";
 import {
+  useClient,
   useDocumentOperation,
   useFormValue,
   type StringInputProps,
 } from "sanity";
+
+import {
+  fetchCoverFromUrl,
+  uploadAndWaitForReady,
+} from "./bookCoverHelpers";
 
 type Volume = {
   id: string;
@@ -123,8 +129,10 @@ export function BookLookupInput(_props: StringInputProps) {
   const [results, setResults] = useState<Volume[]>([]);
   const [loading, setLoading] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [stage, setStage] = useState<string | null>(null);
   const [importedTitle, setImportedTitle] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const client = useClient({ apiVersion: "2026-05-21" });
 
   const search = useCallback(async () => {
     const q = query.trim();
@@ -160,6 +168,7 @@ export function BookLookupInput(_props: StringInputProps) {
     }
     setImportingId(v.id);
     setError(null);
+    setStage(null);
     try {
       const info = v.volumeInfo;
       const patches: Record<string, unknown> = {};
@@ -188,9 +197,36 @@ export function BookLookupInput(_props: StringInputProps) {
       const mappedGenres = mapGenres(info.categories);
       if (mappedGenres.length > 0) patches.genres = mappedGenres;
 
-      // Cover is intentionally NOT imported here. Use the "Find alternate
-      // covers" picker below to add one after import. Keeps this step fast,
-      // atomic, and free of broken-image edge cases.
+      // Cover — fetch via proxy, upload to Sanity, wait until the asset is
+      // fully processed AND its preview URLs are CDN-warm before referencing.
+      // This is what eliminates the "stuck loading after refresh" issue.
+      const coverSource =
+        (isbn &&
+          `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`) ||
+        info.imageLinks?.thumbnail?.replace(/^http:/, "https:");
+      if (coverSource) {
+        try {
+          setStage("Downloading cover…");
+          const blob = await fetchCoverFromUrl(coverSource);
+
+          setStage("Uploading to Sanity…");
+          const assetId = await uploadAndWaitForReady(
+            client,
+            blob,
+            `cover-${v.id}.jpg`,
+          );
+
+          patches.cover = {
+            _type: "image",
+            asset: { _type: "reference", _ref: assetId },
+            alt: info.title || "",
+          };
+        } catch (e) {
+          // Cover fetch failed — fall back to importing without a cover.
+          // User can pick one manually with the Find covers button after.
+          console.warn("Cover import failed, continuing without:", e);
+        }
+      }
 
       // External link to Google Books — only set if not already populated
       const infoLink = info.infoLink || info.canonicalVolumeLink;
@@ -205,15 +241,18 @@ export function BookLookupInput(_props: StringInputProps) {
         ];
       }
 
+      setStage("Saving…");
       // Apply patches through the form's operation API so Studio tracks
       // the changes as pending edits (Publish button activates).
       docOp.patch.execute([{ set: patches }]);
+      setStage(null);
       setImportedTitle(info.title || v.id);
       setResults([]);
       setQuery("");
     } catch (e) {
       console.error(e);
-        setError(e instanceof Error ? e.message : "Import failed");
+      setStage(null);
+      setError(e instanceof Error ? e.message : "Import failed");
     } finally {
       setImportingId(null);
     }
@@ -230,10 +269,9 @@ export function BookLookupInput(_props: StringInputProps) {
       >
         <Stack space={3}>
           <Text size={1} muted>
-            Search Google Books to autofill title, authors, ISBN, page count,
-            genres, and published year. After importing, use{" "}
-            <strong>Find alternate covers</strong> below the cover field to
-            pick an image.
+            Search Google Books to autofill the book&apos;s metadata and cover
+            image in one step. The cover can be swapped after with{" "}
+            <strong>Find more covers</strong> below.
           </Text>
           <Flex gap={2}>
             <Box flex={1}>
@@ -259,6 +297,15 @@ export function BookLookupInput(_props: StringInputProps) {
             />
           </Flex>
 
+          {importingId && stage && (
+            <Card tone="primary" padding={2} radius={2}>
+              <Flex gap={2} align="center">
+                <Spinner muted />
+                <Text size={1}>{stage}</Text>
+              </Flex>
+            </Card>
+          )}
+
           {error && (
             <Card tone="critical" padding={2} radius={2}>
               <Text size={1}>{error}</Text>
@@ -268,9 +315,8 @@ export function BookLookupInput(_props: StringInputProps) {
           {importedTitle && (
             <Card tone="positive" padding={2} radius={2}>
               <Text size={1}>
-                ✓ Imported <strong>{importedTitle}</strong>. Scroll to the
-                cover field below and click{" "}
-                <strong>Find alternate covers</strong> to pick an image.
+                ✓ Imported <strong>{importedTitle}</strong>. Review the fields
+                below and click Publish when ready.
               </Text>
             </Card>
           )}
