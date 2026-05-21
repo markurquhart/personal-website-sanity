@@ -22,10 +22,15 @@ export type SocialLink = {
 export type SiteSettings = {
   title?: string | null;
   tagline?: string | null;
-  bio?: string | null;
   footerText?: string | null;
   avatar?: SanityImageAsset | null;
   socials?: SocialLink[] | null;
+};
+
+export type HomePage = {
+  intro?: string | null;
+  heroPhotos?: Photo[] | null;
+  sections?: unknown[] | null;
 };
 
 export type Photo = {

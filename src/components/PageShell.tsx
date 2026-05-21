@@ -2,8 +2,8 @@ import { NavSidebar } from "@/components/NavSidebar";
 import { MobileNav } from "@/components/MobileNav";
 import { MobileProfileInline } from "@/components/MobileShell";
 import { sanityFetch } from "@/sanity/lib/live";
-import { SITE_SETTINGS_QUERY } from "@/sanity/lib/queries";
-import type { SiteSettings } from "@/sanity/lib/types";
+import { SHELL_QUERY } from "@/sanity/lib/queries";
+import type { HomePage, SiteSettings } from "@/sanity/lib/types";
 
 export async function PageShell({
   children,
@@ -12,13 +12,14 @@ export async function PageShell({
   children: React.ReactNode;
   hideMobileProfile?: boolean;
 }) {
-  const { data } = await sanityFetch({ query: SITE_SETTINGS_QUERY });
-  const settings = data as SiteSettings | null;
+  const { data } = await sanityFetch({ query: SHELL_QUERY });
+  const settings = (data as { settings?: SiteSettings | null })?.settings ?? null;
+  const home = (data as { home?: HomePage | null })?.home ?? null;
+  const intro = home?.intro ?? null;
 
   return (
     <>
-      {/* Full-viewport-height divider line at main's outer-left edge.
-          left = outer-padding (42) + sidebar (280) + gap (48) */}
+      {/* Full-viewport-height divider at main's outer-left edge */}
       <div
         aria-hidden
         className="pointer-events-none fixed inset-y-0 z-10 hidden w-px bg-[#dcdcdc] xl:block"
@@ -34,14 +35,14 @@ export async function PageShell({
         />
         <NavSidebar
           title={settings?.title}
-          bio={settings?.bio}
+          bio={intro}
           avatar={settings?.avatar}
           socials={settings?.socials}
           footerText={settings?.footerText}
         />
         <main className="w-full xl:w-auto xl:min-w-0 xl:flex-1 xl:pl-[42px]">
           {!hideMobileProfile && (
-            <MobileProfileInline avatar={settings?.avatar} bio={settings?.bio} />
+            <MobileProfileInline avatar={settings?.avatar} bio={intro} />
           )}
           {children}
         </main>

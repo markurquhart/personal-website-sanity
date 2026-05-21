@@ -17,14 +17,7 @@ export const siteSettings = defineType({
       name: "tagline",
       title: "Tagline",
       type: "string",
-      description: "Shown in metadata and the footer",
-    }),
-    defineField({
-      name: "bio",
-      title: "Bio",
-      type: "text",
-      rows: 3,
-      description: "The short description on the home page",
+      description: "Used in browser tab, social previews, and meta tags.",
     }),
     defineField({
       name: "avatar",

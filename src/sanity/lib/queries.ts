@@ -4,7 +4,6 @@ export const SITE_SETTINGS_QUERY = defineQuery(`
   *[_type == "siteSettings"][0]{
     title,
     tagline,
-    bio,
     footerText,
     avatar{
       asset->{ _id, url, metadata { lqip, dimensions } },
@@ -14,18 +13,39 @@ export const SITE_SETTINGS_QUERY = defineQuery(`
   }
 `);
 
-export const PHOTOS_QUERY = defineQuery(`
-  *[_type == "photo"] | order(takenAt asc){
-    _id,
-    location,
-    takenAt,
-    caption,
-    image{
+// Single combined query used by every page (sidebar + intro)
+export const SHELL_QUERY = defineQuery(`{
+  "settings": *[_type == "siteSettings"][0]{
+    title,
+    tagline,
+    footerText,
+    avatar{
       asset->{ _id, url, metadata { lqip, dimensions } },
-      alt,
-      hotspot,
-      crop
-    }
+      alt
+    },
+    socials[]{ label, url, group, icon }
+  },
+  "home": *[_type == "homePage"][0]{
+    intro
+  }
+}`);
+
+export const HOME_QUERY = defineQuery(`
+  *[_type == "homePage"][0]{
+    intro,
+    "heroPhotos": heroPhotos[]->{
+      _id,
+      location,
+      takenAt,
+      caption,
+      image{
+        asset->{ _id, url, metadata { lqip, dimensions } },
+        alt,
+        hotspot,
+        crop
+      }
+    },
+    sections
   }
 `);
 
