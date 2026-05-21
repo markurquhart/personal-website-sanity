@@ -40,11 +40,10 @@ export function BookCoverInput(props: ObjectInputProps) {
     try {
       const found: Candidate[] = [];
 
-      // 1) Open Library by ISBN
+      // 1) Open Library by ISBN (always tries this first)
       if (isbn) {
         const olThumb = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-M.jpg?default=false`;
         const olFull = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
-        // Check it actually returns something
         try {
           const r = await fetch(olThumb);
           if (r.ok) {
@@ -61,40 +60,40 @@ export function BookCoverInput(props: ObjectInputProps) {
         } catch {}
       }
 
-      // 2) Google Books: all editions of this book
-      // Search by ISBN if we have it (returns this edition + others); otherwise
-      // by title+author.
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API;
-      const keyParam = apiKey ? `&key=${apiKey}` : "";
-      let query: string | null = null;
+      // 2) Open Library Search — multiple editions, each may have its own cover.
+      // Builds a query from ISBN (best) or title+first author.
+      const params = new URLSearchParams();
       if (isbn) {
-        query = `isbn:${isbn}`;
+        params.set("isbn", isbn);
       } else if (title) {
-        const a = (authors || [])[0] || "";
-        query = `intitle:${title}${a ? `+inauthor:${a}` : ""}`;
+        params.set("title", title);
+        const a = (authors || [])[0];
+        if (a) params.set("author", a);
       }
+      params.set("limit", "15");
 
-      if (query) {
-        const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10${keyParam}`;
+      try {
+        const url = `https://openlibrary.org/search.json?${params.toString()}`;
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
-          for (const item of data.items || []) {
-            const img = item.volumeInfo?.imageLinks?.thumbnail;
-            if (!img) continue;
-            const thumb = img.replace(/^http:/, "https:");
-            const full = thumb.replace(/&edge=curl/, "").replace(/&zoom=\d/, "&zoom=3");
+          for (const doc of data.docs || []) {
+            if (!doc.cover_i) continue;
+            const thumb = `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg?default=false`;
+            const full = `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg?default=false`;
+            const label =
+              (doc.publisher && doc.publisher[0]) ||
+              (doc.first_publish_year ? String(doc.first_publish_year) : "Open Library");
             found.push({
-              id: `gb-${item.id}`,
-              label:
-                item.volumeInfo?.publisher ||
-                item.volumeInfo?.publishedDate?.slice(0, 4) ||
-                "Google Books",
+              id: `ol-id-${doc.cover_i}`,
+              label,
               thumbUrl: thumb,
               fullUrl: full,
             });
           }
         }
+      } catch (e) {
+        console.warn("Open Library search failed:", e);
       }
 
       // De-dupe by thumbUrl
@@ -104,7 +103,9 @@ export function BookCoverInput(props: ObjectInputProps) {
 
       setCandidates(dedup);
       if (dedup.length === 0)
-        setError("No alternative covers found. Try editing the ISBN or title.");
+        setError(
+          "No alternative covers found. Try editing the ISBN or title, or upload manually.",
+        );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cover search failed");
     } finally {
