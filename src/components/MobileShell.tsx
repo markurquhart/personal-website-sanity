@@ -220,6 +220,8 @@ export function MobileSidebar({
               onClick={onClose}
               className="group flex items-center justify-between gap-[17px] border-b border-[#ececec] py-[14px] no-underline"
               style={{ color: RED }}
+              data-track="nav-link"
+              data-track-label="Blog"
             >
               <SocialIcon
                 name="blog"
@@ -262,6 +264,8 @@ export function MobileSidebar({
                         onClick={onClose}
                         aria-label={s.label}
                         title={s.label}
+                        data-track="nav-link"
+                        data-track-label={s.label}
                         className="flex h-11 w-11 items-center justify-center rounded-md border border-[#dbdbdb] text-[#737373] transition-colors hover:border-[#1a1a1a] hover:text-[#1a1a1a]"
                       >
                         <SocialIcon name={s.icon} className="h-5 w-5" />

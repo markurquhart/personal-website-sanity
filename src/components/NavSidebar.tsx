@@ -102,13 +102,21 @@ function RowItem({
         rel="noreferrer noopener"
         className={className}
         style={style}
+        data-track="nav-link"
+        data-track-label={label}
       >
         {inner}
       </a>
     );
   }
   return (
-    <Link href={href} className={className} style={style}>
+    <Link
+      href={href}
+      className={className}
+      style={style}
+      data-track="nav-link"
+      data-track-label={label}
+    >
       {inner}
     </Link>
   );
@@ -142,13 +150,22 @@ function IconItem({
         className={className}
         aria-label={label}
         title={label}
+        data-track="nav-link"
+        data-track-label={label}
       >
         {inner}
       </a>
     );
   }
   return (
-    <Link href={href} className={className} aria-label={label} title={label}>
+    <Link
+      href={href}
+      className={className}
+      aria-label={label}
+      title={label}
+      data-track="nav-link"
+      data-track-label={label}
+    >
       {inner}
     </Link>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, EffectFade, Navigation, Pagination } from "swiper/modules";
 
@@ -30,6 +31,19 @@ function formatDate(iso: string) {
 }
 
 export function PhotoSlider({ photos }: { photos: Photo[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Attach stable data-track hooks to Swiper's auto-generated nav buttons so
+  // GTM triggers don't have to depend on Swiper's class names.
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+    const prev = root.querySelector(".swiper-button-prev");
+    const next = root.querySelector(".swiper-button-next");
+    prev?.setAttribute("data-track", "slider-prev");
+    next?.setAttribute("data-track", "slider-next");
+  }, []);
+
   if (!photos.length) {
     return (
       <div className="flex h-[60vh] w-full items-center justify-center bg-[#f3f3f3] text-sm text-[#888] xl:h-[calc(100vh_-_84px)]">
@@ -38,19 +52,32 @@ export function PhotoSlider({ photos }: { photos: Photo[] }) {
     );
   }
   return (
-    <div className="relative h-[60vh] w-full overflow-hidden bg-[#111] xl:h-[calc(100vh_-_84px)]">
+    <div
+      ref={containerRef}
+      data-track="slider"
+      className="relative h-[60vh] w-full overflow-hidden bg-[#111] xl:h-[calc(100vh_-_84px)]"
+    >
       <Swiper
         modules={[Autoplay, Pagination, EffectFade, Navigation]}
         effect="fade"
         fadeEffect={{ crossFade: true }}
         autoplay={{ delay: 4000, disableOnInteraction: false }}
-        pagination={{ clickable: true }}
+        pagination={{
+          clickable: true,
+          renderBullet: (_index, className) =>
+            `<span class="${className}" data-track="slider-dot"></span>`,
+        }}
         navigation
         loop
         className="h-full w-full"
       >
         {photos.map((p) => (
-          <SwiperSlide key={p._id} className="relative h-full w-full">
+          <SwiperSlide
+            key={p._id}
+            data-track="slider-slide"
+            data-track-location={p.location || ""}
+            className="relative h-full w-full"
+          >
             {p.image?.asset ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
