@@ -108,16 +108,19 @@ function mapGenres(googleCategories: string[] = []): string[] {
   return Array.from(matched);
 }
 
-// Fetch a cover image — try Open Library by ISBN (CORS-friendly) first,
-// fall back to Google Books' image (may CORS-fail in some browsers).
+// Fetch a cover image via the same-origin proxy (handles CORS for both
+// Open Library and Google Books). Tries Open Library by ISBN first, falls
+// back to Google's thumbnail.
 async function fetchCoverBlob(
   isbn: string | undefined,
   googleThumb: string | undefined,
 ): Promise<{ blob: Blob; filename: string } | null> {
+  const proxy = (u: string) => `/api/cover-proxy?url=${encodeURIComponent(u)}`;
+
   if (isbn) {
     try {
       const url = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
-      const res = await fetch(url);
+      const res = await fetch(proxy(url));
       if (res.ok) {
         const buf = await res.arrayBuffer();
         if (buf.byteLength > 1000) {
@@ -137,7 +140,7 @@ async function fetchCoverBlob(
         .replace(/^http:/, "https:")
         .replace(/&edge=curl/, "")
         .replace(/&zoom=\d/, "&zoom=3");
-      const res = await fetch(url);
+      const res = await fetch(proxy(url));
       if (res.ok) {
         const buf = await res.arrayBuffer();
         if (buf.byteLength > 1000) {

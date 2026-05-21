@@ -40,7 +40,7 @@ export function BookCoverInput(props: ObjectInputProps) {
     try {
       const found: Candidate[] = [];
 
-      // 1) Open Library by ISBN (always tries this first)
+      // 1) Open Library by ISBN
       if (isbn) {
         const olThumb = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-M.jpg?default=false`;
         const olFull = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
@@ -60,20 +60,19 @@ export function BookCoverInput(props: ObjectInputProps) {
         } catch {}
       }
 
-      // 2) Open Library Search — multiple editions, each may have its own cover.
-      // Builds a query from ISBN (best) or title+first author.
-      const params = new URLSearchParams();
+      // 2) Open Library Search — multiple editions, each with its own cover
+      const olParams = new URLSearchParams();
       if (isbn) {
-        params.set("isbn", isbn);
+        olParams.set("isbn", isbn);
       } else if (title) {
-        params.set("title", title);
+        olParams.set("title", title);
         const a = (authors || [])[0];
-        if (a) params.set("author", a);
+        if (a) olParams.set("author", a);
       }
-      params.set("limit", "15");
+      olParams.set("limit", "15");
 
       try {
-        const url = `https://openlibrary.org/search.json?${params.toString()}`;
+        const url = `https://openlibrary.org/search.json?${olParams.toString()}`;
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
@@ -94,6 +93,46 @@ export function BookCoverInput(props: ObjectInputProps) {
         }
       } catch (e) {
         console.warn("Open Library search failed:", e);
+      }
+
+      // 3) Google Books — all editions of this book
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API;
+      const keyParam = apiKey ? `&key=${apiKey}` : "";
+      let gbQuery: string | null = null;
+      if (isbn) {
+        gbQuery = `isbn:${isbn}`;
+      } else if (title) {
+        const a = (authors || [])[0] || "";
+        gbQuery = `intitle:${title}${a ? `+inauthor:${a}` : ""}`;
+      }
+
+      if (gbQuery) {
+        try {
+          const gbUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(gbQuery)}&maxResults=10${keyParam}`;
+          const res = await fetch(gbUrl);
+          if (res.ok) {
+            const data = await res.json();
+            for (const item of data.items || []) {
+              const img = item.volumeInfo?.imageLinks?.thumbnail;
+              if (!img) continue;
+              const thumb = img.replace(/^http:/, "https:");
+              const full = thumb
+                .replace(/&edge=curl/, "")
+                .replace(/&zoom=\d/, "&zoom=3");
+              found.push({
+                id: `gb-${item.id}`,
+                label:
+                  item.volumeInfo?.publisher ||
+                  item.volumeInfo?.publishedDate?.slice(0, 4) ||
+                  "Google Books",
+                thumbUrl: thumb,
+                fullUrl: full,
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("Google Books search failed:", e);
+        }
       }
 
       // De-dupe by thumbUrl
@@ -117,10 +156,10 @@ export function BookCoverInput(props: ObjectInputProps) {
     setImportingId(c.id);
     setError(null);
     try {
-      // Same approach as the initial book import: fetch the URL, upload the blob.
-      // Works for Open Library (CORS OK). May fail for Google Books image CDN.
-      const res = await fetch(c.fullUrl);
-      if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+      // Fetch via our same-origin proxy — handles Google Books CORS too.
+      const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(c.fullUrl)}`;
+      const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error(`Cover fetch failed: ${res.status}`);
       const blob = await res.blob();
       if (blob.size < 1000) throw new Error("Cover image looks empty");
       const asset = await client.assets.upload("image", blob, {
