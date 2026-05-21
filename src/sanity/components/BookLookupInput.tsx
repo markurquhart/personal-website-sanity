@@ -52,13 +52,13 @@ export function BookLookupInput(_props: StringInputProps) {
     setError(null);
     setImportedTitle(null);
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY;
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API;
       const keyParam = apiKey ? `&key=${apiKey}` : "";
       const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=8${keyParam}`;
       const res = await fetch(url);
       if (res.status === 429) {
         throw new Error(
-          "Google Books rate-limited the request. Wait ~60 seconds, or add a NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY env var to lift the quota.",
+          "Google Books rate-limited the request. Wait ~60 seconds, or add a NEXT_PUBLIC_GOOGLE_BOOKS_API env var to lift the quota.",
         );
       }
       if (!res.ok) throw new Error(`Search failed: ${res.status}`);
