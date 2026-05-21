@@ -88,21 +88,17 @@ npm run dev
 
 ### Env vars
 
-`.env.local`:
+Create a `.env.local` with the keys below. Values aren't checked in — grab them from the Sanity project dashboard and the Vercel project settings.
 
-```
-NEXT_PUBLIC_SANITY_PROJECT_ID=<project-id>
-NEXT_PUBLIC_SANITY_DATASET=production
-NEXT_PUBLIC_SANITY_API_VERSION=2026-05-20
+| Variable | Required | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_SANITY_PROJECT_ID` | yes | Sanity project ID |
+| `NEXT_PUBLIC_SANITY_DATASET` | yes | Sanity dataset name |
+| `NEXT_PUBLIC_SANITY_API_VERSION` | yes | Pin to today's date (e.g. `2026-05-21`) |
+| `SANITY_API_READ_TOKEN` | optional | Only needed for draft preview / authenticated reads |
+| `NEXT_PUBLIC_GTM_ID` | optional | Google Tag Manager ID. Leave unset locally so dev events don't fire; set in Vercel for production. |
 
-# Optional — required only for draft preview / authenticated reads
-SANITY_API_READ_TOKEN=
-
-# Google Tag Manager — leave unset locally so dev events don't fire
-# NEXT_PUBLIC_GTM_ID=GTM-XXXXXXX
-```
-
-The same vars are set in Vercel (with `NEXT_PUBLIC_GTM_ID` set in Production).
+`.env*` files are gitignored — never commit them.
 
 ## Common tasks
 
