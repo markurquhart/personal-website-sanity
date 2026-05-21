@@ -13,11 +13,35 @@ import {
 } from "@sanity/ui";
 import { useCallback, useState } from "react";
 import {
-  set,
   useClient,
+  useDocumentOperation,
   useFormValue,
   type ObjectInputProps,
 } from "sanity";
+
+// Decode the blob with the browser's Image API to confirm it's actually a
+// valid image before sending it to Sanity. Catches truncated downloads,
+// HTML error pages mislabeled as images, etc.
+async function validateImageBlob(blob: Blob): Promise<{ w: number; h: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const dims = { w: img.naturalWidth, h: img.naturalHeight };
+      URL.revokeObjectURL(url);
+      if (dims.w === 0 || dims.h === 0) {
+        reject(new Error("Image decoded to 0×0 — likely corrupt"));
+      } else {
+        resolve(dims);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image failed to decode (not a valid image)"));
+    };
+    img.src = url;
+  });
+}
 
 type Candidate = {
   id: string;
@@ -27,6 +51,10 @@ type Candidate = {
 };
 
 export function BookCoverInput(props: ObjectInputProps) {
+  const docId = useFormValue(["_id"]) as string;
+  const docType = (useFormValue(["_type"]) as string) || "book";
+  const publishedId = docId?.replace(/^drafts\./, "") || "";
+  const docOp = useDocumentOperation(publishedId, docType);
   const isbn = useFormValue(["isbn"]) as string | undefined;
   const title = useFormValue(["title"]) as string | undefined;
   const authors = useFormValue(["authors"]) as string[] | undefined;
@@ -160,6 +188,7 @@ export function BookCoverInput(props: ObjectInputProps) {
     setImportingId(c.id);
     setError(null);
     try {
+      // 1) Fetch via proxy with timeout
       const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(c.fullUrl)}`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -170,22 +199,37 @@ export function BookCoverInput(props: ObjectInputProps) {
         clearTimeout(timeoutId);
       }
       if (!res.ok) throw new Error(`Cover fetch failed: ${res.status}`);
+
+      // 2) Get blob + sanity-check size + content type
       const blob = await res.blob();
       if (blob.size < 1000) throw new Error("Cover image looks empty");
       if (!blob.type.startsWith("image/"))
         throw new Error(`Got non-image response (${blob.type})`);
+
+      // 3) Decode the image in the browser to confirm it's valid before
+      // wasting a Sanity asset slot on a broken file.
+      await validateImageBlob(blob);
+
+      // 4) Upload to Sanity. The upload promise resolves only when the asset
+      // is fully ingested.
       const asset = await client.assets.upload("image", blob, {
         filename: `cover-${c.id}.jpg`,
       });
-      // Update via the form's onChange so Studio tracks this as a pending edit
-      // and the Publish button activates correctly.
-      props.onChange(
-        set({
-          _type: "image",
-          asset: { _type: "reference", _ref: asset._id },
-          alt: title || "",
-        }),
-      );
+
+      // 5) Patch the cover field via document operations (same path the
+      // lookup import uses — proven reliable).
+      docOp.patch.execute([
+        {
+          set: {
+            cover: {
+              _type: "image",
+              asset: { _type: "reference", _ref: asset._id },
+              alt: title || "",
+            },
+          },
+        },
+      ]);
+
       setOpen(false);
       setCandidates([]);
     } catch (e) {
