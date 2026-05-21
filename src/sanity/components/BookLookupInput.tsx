@@ -13,7 +13,6 @@ import {
 } from "@sanity/ui";
 import { useCallback, useState } from "react";
 import {
-  useClient,
   useDocumentOperation,
   useFormValue,
   type StringInputProps,
@@ -113,63 +112,6 @@ function mapGenres(googleCategories: string[] = []): string[] {
   return Array.from(matched);
 }
 
-async function fetchWithTimeout(url: string, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-// Fetch a cover image via the same-origin proxy. Times out per source so
-// a slow Open Library / Google response never blocks the whole import.
-async function fetchCoverBlob(
-  isbn: string | undefined,
-  googleThumb: string | undefined,
-): Promise<{ blob: Blob; filename: string } | null> {
-  const proxy = (u: string) => `/api/cover-proxy?url=${encodeURIComponent(u)}`;
-
-  if (isbn) {
-    try {
-      const url = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
-      const res = await fetchWithTimeout(proxy(url));
-      if (res.ok) {
-        const buf = await res.arrayBuffer();
-        if (buf.byteLength > 1000) {
-          return {
-            blob: new Blob([buf], { type: "image/jpeg" }),
-            filename: `cover-${isbn}.jpg`,
-          };
-        }
-      }
-    } catch (e) {
-      console.warn("Open Library cover lookup failed/timed out:", e);
-    }
-  }
-  if (googleThumb) {
-    try {
-      const url = googleThumb
-        .replace(/^http:/, "https:")
-        .replace(/&edge=curl/, "")
-        .replace(/&zoom=\d/, "&zoom=3");
-      const res = await fetchWithTimeout(proxy(url));
-      if (res.ok) {
-        const buf = await res.arrayBuffer();
-        if (buf.byteLength > 1000) {
-          return {
-            blob: new Blob([buf], { type: "image/jpeg" }),
-            filename: `cover-google-${Date.now()}.jpg`,
-          };
-        }
-      }
-    } catch (e) {
-      console.warn("Google Books cover fetch failed/timed out:", e);
-    }
-  }
-  return null;
-}
 
 export function BookLookupInput(_props: StringInputProps) {
   const docId = useFormValue(["_id"]) as string;
@@ -181,10 +123,8 @@ export function BookLookupInput(_props: StringInputProps) {
   const [results, setResults] = useState<Volume[]>([]);
   const [loading, setLoading] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
-  const [stage, setStage] = useState<string | null>(null);
   const [importedTitle, setImportedTitle] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const client = useClient({ apiVersion: "2026-05-21" });
 
   const search = useCallback(async () => {
     const q = query.trim();
@@ -220,11 +160,9 @@ export function BookLookupInput(_props: StringInputProps) {
     }
     setImportingId(v.id);
     setError(null);
-    setStage(null);
     try {
       const info = v.volumeInfo;
       const patches: Record<string, unknown> = {};
-      setStage("Preparing book details…");
 
       if (info.title) {
         patches.title = info.title;
@@ -250,26 +188,9 @@ export function BookLookupInput(_props: StringInputProps) {
       const mappedGenres = mapGenres(info.categories);
       if (mappedGenres.length > 0) patches.genres = mappedGenres;
 
-      // Cover image — blocking. If fetch/upload fails the entire import
-      // fails (atomic) so the user is never left with a half-saved book.
-      if (isbn || info.imageLinks?.thumbnail) {
-        setStage("Fetching cover image…");
-        const cover = await fetchCoverBlob(isbn, info.imageLinks?.thumbnail);
-        if (!cover) {
-          throw new Error(
-            "Couldn't fetch a cover from Open Library or Google Books. Try a different result.",
-          );
-        }
-        setStage("Uploading cover to Sanity…");
-        const asset = await client.assets.upload("image", cover.blob, {
-          filename: cover.filename,
-        });
-        patches.cover = {
-          _type: "image",
-          asset: { _type: "reference", _ref: asset._id },
-          alt: info.title || "",
-        };
-      }
+      // Cover is intentionally NOT imported here. Use the "Find alternate
+      // covers" picker below to add one after import. Keeps this step fast,
+      // atomic, and free of broken-image edge cases.
 
       // External link to Google Books — only set if not already populated
       const infoLink = info.infoLink || info.canonicalVolumeLink;
@@ -284,18 +205,15 @@ export function BookLookupInput(_props: StringInputProps) {
         ];
       }
 
-      setStage("Saving to Sanity…");
       // Apply patches through the form's operation API so Studio tracks
       // the changes as pending edits (Publish button activates).
       docOp.patch.execute([{ set: patches }]);
-      setStage(null);
       setImportedTitle(info.title || v.id);
       setResults([]);
       setQuery("");
     } catch (e) {
       console.error(e);
-      setStage(null);
-      setError(e instanceof Error ? e.message : "Import failed");
+        setError(e instanceof Error ? e.message : "Import failed");
     } finally {
       setImportingId(null);
     }
@@ -312,8 +230,10 @@ export function BookLookupInput(_props: StringInputProps) {
       >
         <Stack space={3}>
           <Text size={1} muted>
-            Search Google Books to autofill title, authors, cover, ISBN, page
-            count, genres, and published year.
+            Search Google Books to autofill title, authors, ISBN, page count,
+            genres, and published year. After importing, use{" "}
+            <strong>Find alternate covers</strong> below the cover field to
+            pick an image.
           </Text>
           <Flex gap={2}>
             <Box flex={1}>
@@ -339,15 +259,6 @@ export function BookLookupInput(_props: StringInputProps) {
             />
           </Flex>
 
-          {importingId && stage && (
-            <Card tone="primary" padding={2} radius={2}>
-              <Flex gap={2} align="center">
-                <Spinner muted />
-                <Text size={1}>{stage}</Text>
-              </Flex>
-            </Card>
-          )}
-
           {error && (
             <Card tone="critical" padding={2} radius={2}>
               <Text size={1}>{error}</Text>
@@ -357,8 +268,9 @@ export function BookLookupInput(_props: StringInputProps) {
           {importedTitle && (
             <Card tone="positive" padding={2} radius={2}>
               <Text size={1}>
-                ✓ Import complete: <strong>{importedTitle}</strong>. Review
-                fields below and hit Publish when ready.
+                ✓ Imported <strong>{importedTitle}</strong>. Scroll to the
+                cover field below and click{" "}
+                <strong>Find alternate covers</strong> to pick an image.
               </Text>
             </Card>
           )}

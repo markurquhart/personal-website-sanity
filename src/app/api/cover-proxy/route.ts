@@ -40,9 +40,19 @@ export async function GET(req: Request) {
     );
   }
 
+  // Reject non-image upstream responses so we never upload an HTML error
+  // page (or anything weird) into Sanity as an image asset.
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.startsWith("image/")) {
+    return NextResponse.json(
+      { error: `upstream returned non-image content (${contentType})` },
+      { status: 415 },
+    );
+  }
+
   return new Response(res.body, {
     headers: {
-      "Content-Type": res.headers.get("content-type") || "image/jpeg",
+      "Content-Type": contentType,
       "Cache-Control": "public, max-age=3600",
     },
   });

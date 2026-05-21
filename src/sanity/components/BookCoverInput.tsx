@@ -172,6 +172,8 @@ export function BookCoverInput(props: ObjectInputProps) {
       if (!res.ok) throw new Error(`Cover fetch failed: ${res.status}`);
       const blob = await res.blob();
       if (blob.size < 1000) throw new Error("Cover image looks empty");
+      if (!blob.type.startsWith("image/"))
+        throw new Error(`Got non-image response (${blob.type})`);
       const asset = await client.assets.upload("image", blob, {
         filename: `cover-${c.id}.jpg`,
       });
