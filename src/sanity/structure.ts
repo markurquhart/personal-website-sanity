@@ -1,4 +1,4 @@
-import { ImagesIcon } from "@sanity/icons";
+import { ImagesIcon, DocumentsIcon } from "@sanity/icons";
 import type { StructureResolver } from "sanity/structure";
 
 export const structure: StructureResolver = (S) =>
@@ -22,7 +22,20 @@ export const structure: StructureResolver = (S) =>
             ]),
         ),
       S.divider(),
-      S.documentTypeListItem("post").title("Blog Posts"),
+      S.listItem()
+        .title("Entries")
+        .icon(DocumentsIcon)
+        .child(
+          S.list()
+            .title("Entries")
+            .items([
+              S.documentTypeListItem("post").title("Blog Posts"),
+              // Future entry types go here, e.g.:
+              // S.documentTypeListItem("note").title("Notes"),
+              // S.documentTypeListItem("project").title("Projects"),
+              // S.documentTypeListItem("caseStudy").title("Case Studies"),
+            ]),
+        ),
       S.divider(),
       S.listItem()
         .title("Assets")
