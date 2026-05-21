@@ -23,7 +23,17 @@ type Volume = {
     publishedDate?: string;
     pageCount?: number;
     industryIdentifiers?: { type: string; identifier: string }[];
-    imageLinks?: { thumbnail?: string; smallThumbnail?: string };
+    imageLinks?: {
+      smallThumbnail?: string;
+      thumbnail?: string;
+      small?: string;
+      medium?: string;
+      large?: string;
+      extraLarge?: string;
+    };
+    categories?: string[];
+    infoLink?: string;
+    canonicalVolumeLink?: string;
   };
 };
 
@@ -33,6 +43,119 @@ function slugify(s: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 96);
+}
+
+// Maps Google Books category strings to our predefined GENRES list.
+const GENRE_ALIASES: Record<string, string> = {
+  fiction: "Fiction",
+  "non-fiction": "Non-Fiction",
+  "biography & autobiography": "Biography",
+  biography: "Biography",
+  history: "History",
+  philosophy: "Philosophy",
+  science: "Science",
+  "technology & engineering": "Technology",
+  computers: "Technology",
+  "business & economics": "Business",
+  "self-help": "Self-Help",
+  psychology: "Psychology",
+  "social science": "Sociology",
+  "political science": "Politics",
+  politics: "Politics",
+  economics: "Economics",
+  "health & fitness": "Health",
+  travel: "Travel",
+  cooking: "Cooking",
+  art: "Art",
+  poetry: "Poetry",
+  drama: "Drama",
+  "performing arts": "Drama",
+  "juvenile fiction": "Young Adult",
+  "young adult fiction": "Young Adult",
+  "young adult": "Young Adult",
+  "juvenile nonfiction": "Children's",
+  religion: "Religion",
+  "body, mind & spirit": "Spirituality",
+  spirituality: "Spirituality",
+  education: "Education",
+  "sports & recreation": "Sports",
+  sports: "Sports",
+  fantasy: "Fantasy",
+  "science fiction": "Sci-Fi",
+  "sci-fi": "Sci-Fi",
+  mystery: "Mystery",
+  thriller: "Thriller",
+  thrillers: "Thriller",
+  horror: "Horror",
+  romance: "Romance",
+  memoir: "Memoir",
+};
+
+function mapGenres(googleCategories: string[] = []): string[] {
+  const matched = new Set<string>();
+  for (const cat of googleCategories) {
+    // e.g. "Fiction / Thrillers / Suspense" or "Computers"
+    const segments = cat.split(/[\/&]/).map((s) => s.trim().toLowerCase());
+    for (const segment of segments) {
+      const alias = GENRE_ALIASES[segment];
+      if (alias) matched.add(alias);
+    }
+    // Also try the full string
+    const lower = cat.toLowerCase();
+    const aliasFull = GENRE_ALIASES[lower];
+    if (aliasFull) matched.add(aliasFull);
+  }
+  return Array.from(matched);
+}
+
+// Fetch a cover image — try Open Library by ISBN (CORS-friendly) first,
+// fall back to Google Books' image (may fail CORS depending on browser).
+async function fetchCoverBlob(
+  isbn: string | undefined,
+  googleThumb: string | undefined,
+): Promise<{ blob: Blob; filename: string } | null> {
+  // 1) Open Library by ISBN (size=L is large, default=false returns 404 instead of placeholder)
+  if (isbn) {
+    try {
+      const url = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength > 1000) {
+          return {
+            blob: new Blob([buf], { type: "image/jpeg" }),
+            filename: `cover-${isbn}.jpg`,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("Open Library cover lookup failed:", e);
+    }
+  }
+
+  // 2) Google Books thumbnail — try a larger zoom; may CORS-fail silently
+  if (googleThumb) {
+    try {
+      const url = googleThumb
+        .replace(/^http:/, "https:")
+        .replace(/&edge=curl/, "")
+        .replace(/&zoom=\d/, "&zoom=3");
+      const res = await fetch(url);
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength > 1000) {
+          return {
+            blob: new Blob([buf], { type: "image/jpeg" }),
+            filename: `cover-google-${Date.now()}.jpg`,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("Google Books cover fetch failed:", e);
+    }
+  }
+
+  return null;
 }
 
 export function BookLookupInput(_props: StringInputProps) {
@@ -100,31 +223,41 @@ export function BookLookupInput(_props: StringInputProps) {
       const isbn10 = info.industryIdentifiers?.find(
         (i) => i.type === "ISBN_10",
       )?.identifier;
-      if (isbn13 || isbn10) patches.isbn = isbn13 || isbn10;
+      const isbn = isbn13 || isbn10;
+      if (isbn) patches.isbn = isbn;
 
-      if (info.imageLinks?.thumbnail) {
+      // Genres from Google categories → our predefined list
+      const mappedGenres = mapGenres(info.categories);
+      if (mappedGenres.length > 0) patches.genres = mappedGenres;
+
+      // Cover image — Open Library first (CORS-friendly), then Google fallback
+      const cover = await fetchCoverBlob(isbn, info.imageLinks?.thumbnail);
+      if (cover) {
         try {
-          const coverUrl = info.imageLinks.thumbnail
-            .replace(/^http:/, "https:")
-            .replace(/&edge=curl/, "")
-            .replace(/&zoom=\d/, "&zoom=3");
-          const imgRes = await fetch(coverUrl);
-          if (imgRes.ok) {
-            const buf = await imgRes.arrayBuffer();
-            const asset = await client.assets.upload(
-              "image",
-              new Blob([buf], { type: "image/jpeg" }),
-              { filename: `cover-${v.id}.jpg` },
-            );
-            patches.cover = {
-              _type: "image",
-              asset: { _type: "reference", _ref: asset._id },
-              alt: info.title || "",
-            };
-          }
+          const asset = await client.assets.upload("image", cover.blob, {
+            filename: cover.filename,
+          });
+          patches.cover = {
+            _type: "image",
+            asset: { _type: "reference", _ref: asset._id },
+            alt: info.title || "",
+          };
         } catch (e) {
-          console.warn("Cover upload failed (continuing without):", e);
+          console.warn("Cover upload to Sanity failed:", e);
         }
+      }
+
+      // External link to Google Books — only set if not already populated
+      const infoLink = info.infoLink || info.canonicalVolumeLink;
+      if (infoLink) {
+        patches.externalLinks = [
+          {
+            _type: "object",
+            _key: `gb-${v.id}`,
+            label: "Google Books",
+            url: infoLink,
+          },
+        ];
       }
 
       await client.patch(docId).set(patches).commit();
