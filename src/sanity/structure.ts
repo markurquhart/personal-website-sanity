@@ -30,10 +30,10 @@ export const structure: StructureResolver = (S) =>
             .title("Entries")
             .items([
               S.documentTypeListItem("post").title("Blog Posts"),
+              S.documentTypeListItem("book").title("Books"),
               // Future entry types go here, e.g.:
-              // S.documentTypeListItem("note").title("Notes"),
+              // S.documentTypeListItem("place").title("Places"),
               // S.documentTypeListItem("project").title("Projects"),
-              // S.documentTypeListItem("caseStudy").title("Case Studies"),
             ]),
         ),
       S.divider(),

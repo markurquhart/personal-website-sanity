@@ -154,7 +154,6 @@ export function MobileSidebar({
 }) {
   const pathname = usePathname();
   const isHome = pathname === "/";
-  const isBlog = pathname?.startsWith("/blog") ?? false;
   const links = socials ?? [];
   const grouped = useMemo(
     () => ({
@@ -165,8 +164,8 @@ export function MobileSidebar({
     [links],
   );
 
-  type GK = "pages" | "professional" | "social" | "lifestyle" | null;
-  const [openGroup, setOpenGroup] = useState<GK>(isBlog ? "pages" : null);
+  type GK = "professional" | "social" | "lifestyle" | null;
+  const [openGroup, setOpenGroup] = useState<GK>(null);
 
   useEffect(() => {
     if (open) {
@@ -213,26 +212,6 @@ export function MobileSidebar({
           >
             <span>Home</span>
           </Link>
-
-          {isBlog && (
-            <Link
-              href="/blog"
-              onClick={onClose}
-              className="group flex items-center justify-between gap-[17px] border-b border-[#ececec] py-[14px] no-underline"
-              style={{ color: RED }}
-              data-track="nav-link"
-              data-track-label="Blog"
-            >
-              <SocialIcon
-                name="blog"
-                className="h-[18px] w-[18px] flex-shrink-0 text-[#4d4d4d]"
-              />
-              <span className="w-[85%] text-[14px] font-normal leading-[1.5em]">
-                Blog
-              </span>
-              <ArrowIcon className="h-[17px] w-[17px] flex-shrink-0 text-[#4d4d4d]" />
-            </Link>
-          )}
 
           {(["professional", "social", "lifestyle"] as const).map((g) => {
             const items = grouped[g];

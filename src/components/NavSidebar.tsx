@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { urlFor } from "@/sanity/lib/image";
 import type { SanityImageAsset, SocialLink } from "@/sanity/lib/types";
@@ -195,15 +195,10 @@ export function NavSidebar({
     [links],
   );
 
-  const isBlog = pathname?.startsWith("/blog") ?? false;
   const isHome = pathname === "/";
 
-  const initialOpen: GroupKey | null = isBlog ? "pages" : null;
-  const [openGroup, setOpenGroup] = useState<GroupKey | null>(initialOpen);
-
-  useEffect(() => {
-    setOpenGroup(isBlog ? "pages" : null);
-  }, [isBlog]);
+  // All groups start collapsed. User opens them manually.
+  const [openGroup, setOpenGroup] = useState<GroupKey | null>(null);
 
   const toggle = (k: GroupKey) =>
     setOpenGroup((cur) => (cur === k ? null : k));
@@ -248,27 +243,6 @@ export function NavSidebar({
         >
           <span className="w-[85%] leading-[1.5em]">Home</span>
         </Link>
-
-        {/* Pages: header hidden; content shown when active */}
-        <div>
-          <GroupHeader
-            title="Pages"
-            open={openGroup === "pages"}
-            active={isBlog}
-            onToggle={() => toggle("pages")}
-            hidden
-          />
-          {openGroup === "pages" && (
-            <div className="flex flex-col overflow-hidden">
-              <RowItem
-                href="/blog"
-                label="Blog"
-                icon="blog"
-                active={isBlog}
-              />
-            </div>
-          )}
-        </div>
 
         <div>
           <GroupHeader

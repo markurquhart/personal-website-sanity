@@ -95,3 +95,65 @@ export const POST_QUERY = defineQuery(`
 export const POST_SLUGS_QUERY = defineQuery(`
   *[_type == "post" && defined(slug.current)]{ "slug": slug.current }
 `);
+
+export const BOOKS_QUERY = defineQuery(`
+  *[_type == "book" && defined(slug.current)]{
+    _id,
+    title,
+    subtitle,
+    "slug": slug.current,
+    authors,
+    cover{
+      asset->{ _id, url, metadata { lqip } },
+      alt
+    },
+    genres,
+    status,
+    startedAt,
+    finishedAt,
+    pausedAt,
+    rating,
+    favorite,
+    pageCount,
+    publishedYear
+  }
+`);
+
+export const BOOK_QUERY = defineQuery(`
+  *[_type == "book" && slug.current == $slug][0]{
+    _id,
+    title,
+    subtitle,
+    "slug": slug.current,
+    authors,
+    isbn,
+    pageCount,
+    publishedYear,
+    genres,
+    cover{
+      asset->{ _id, url, metadata { lqip, dimensions } },
+      alt
+    },
+    status,
+    addedAt,
+    startedAt,
+    finishedAt,
+    pausedAt,
+    abandonedAt,
+    rating,
+    favorite,
+    review,
+    events[] | order(date asc){
+      _key,
+      type,
+      date,
+      ratingValue,
+      note
+    },
+    externalLinks[]{ label, url }
+  }
+`);
+
+export const BOOK_SLUGS_QUERY = defineQuery(`
+  *[_type == "book" && defined(slug.current)]{ "slug": slug.current }
+`);

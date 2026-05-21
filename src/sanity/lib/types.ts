@@ -69,3 +69,52 @@ export type Post = PostSummary & {
   category?: string | null;
   readTime?: number | null;
 };
+
+export type BookStatus =
+  | "up-next"
+  | "currently-reading"
+  | "completed"
+  | "paused";
+
+export type BookSummary = {
+  _id: string;
+  title?: string | null;
+  subtitle?: string | null;
+  slug?: string | null;
+  authors?: string[] | null;
+  cover?: SanityImageAsset | null;
+  genres?: string[] | null;
+  status?: BookStatus | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  pausedAt?: string | null;
+  rating?: number | null;
+  favorite?: boolean | null;
+  pageCount?: number | null;
+  publishedYear?: number | null;
+};
+
+export type BookEvent = {
+  _key: string;
+  type:
+    | "added"
+    | "started"
+    | "paused"
+    | "resumed"
+    | "finished"
+    | "abandoned"
+    | "rated"
+    | "note";
+  date?: string | null;
+  ratingValue?: number | null;
+  note?: string | null;
+};
+
+export type Book = BookSummary & {
+  isbn?: string | null;
+  addedAt?: string | null;
+  abandonedAt?: string | null;
+  review?: PortableTextBlock[] | null;
+  events?: BookEvent[] | null;
+  externalLinks?: { label: string; url: string }[] | null;
+};

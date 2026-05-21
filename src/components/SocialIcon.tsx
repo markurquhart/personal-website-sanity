@@ -8,7 +8,8 @@ type IconName =
   | "goodreads"
   | "strava"
   | "lastfm"
-  | "blog";
+  | "blog"
+  | "book";
 
 type IconDef = { viewBox: string; path: React.ReactNode };
 
@@ -103,6 +104,17 @@ const ICONS: Record<IconName, IconDef> = {
     path: (
       <path
         d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 12h10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    ),
+  },
+  book: {
+    viewBox: "0 0 24 24",
+    path: (
+      <path
+        d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
