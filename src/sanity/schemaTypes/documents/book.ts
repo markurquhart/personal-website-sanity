@@ -1,6 +1,8 @@
 import { BookIcon } from "@sanity/icons";
 import { defineArrayMember, defineField, defineType } from "sanity";
 
+import { BookLookupInput } from "../../components/BookLookupInput";
+
 export const BOOK_STATUSES = [
   { title: "Up Next", value: "up-next" },
   { title: "Currently Reading", value: "currently-reading" },
@@ -66,6 +68,15 @@ export const book = defineType({
     { name: "history", title: "History" },
   ],
   fields: [
+    defineField({
+      name: "lookup",
+      title: "Quick Lookup",
+      type: "string",
+      group: "details",
+      components: {
+        input: BookLookupInput,
+      },
+    }),
     defineField({
       name: "title",
       title: "Title",
