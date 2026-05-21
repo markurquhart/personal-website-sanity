@@ -61,7 +61,7 @@ export function PhotoSlider({ photos }: { photos: Photo[] }) {
               />
             ) : null}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[40%] bg-gradient-to-b from-transparent to-black/90" />
-            <div className="absolute inset-x-0 bottom-0 z-[3] mb-[25px] pl-[30px] text-[14px] font-light leading-[25px] text-white">
+            <div className="absolute inset-x-0 bottom-[40px] z-[3] text-center text-[14px] font-light leading-[25px] text-white xl:bottom-0 xl:mb-[25px] xl:pl-[30px] xl:text-left">
               {p.location}
               {p.takenAt && (
                 <>
