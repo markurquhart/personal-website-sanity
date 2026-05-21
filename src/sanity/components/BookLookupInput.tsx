@@ -12,7 +12,12 @@ import {
   TextInput,
 } from "@sanity/ui";
 import { useCallback, useState } from "react";
-import { useClient, useFormValue, type StringInputProps } from "sanity";
+import {
+  useClient,
+  useDocumentOperation,
+  useFormValue,
+  type StringInputProps,
+} from "sanity";
 
 type Volume = {
   id: string;
@@ -159,6 +164,10 @@ async function fetchCoverBlob(
 
 export function BookLookupInput(_props: StringInputProps) {
   const docId = useFormValue(["_id"]) as string;
+  const docType = (useFormValue(["_type"]) as string) || "book";
+  // useDocumentOperation expects the published ID (no drafts. prefix)
+  const publishedId = docId?.replace(/^drafts\./, "") || "";
+  const docOp = useDocumentOperation(publishedId, docType);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Volume[]>([]);
   const [loading, setLoading] = useState(false);
@@ -260,13 +269,9 @@ export function BookLookupInput(_props: StringInputProps) {
         ];
       }
 
-      // The document might not exist yet on the server (new unsaved draft) —
-      // bootstrap it first, then patch.
-      await client
-        .transaction()
-        .createIfNotExists({ _id: docId, _type: "book" })
-        .patch(docId, (p) => p.set(patches))
-        .commit();
+      // Apply patches through the form's operation API so Studio tracks
+      // the changes as pending edits (Publish button activates).
+      docOp.patch.execute([{ set: patches }]);
       setImportedTitle(info.title || v.id);
       setResults([]);
       setQuery("");

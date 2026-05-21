@@ -12,7 +12,12 @@ import {
   Text,
 } from "@sanity/ui";
 import { useCallback, useState } from "react";
-import { useClient, useFormValue, type ObjectInputProps } from "sanity";
+import {
+  set,
+  useClient,
+  useFormValue,
+  type ObjectInputProps,
+} from "sanity";
 
 type Candidate = {
   id: string;
@@ -22,7 +27,6 @@ type Candidate = {
 };
 
 export function BookCoverInput(props: ObjectInputProps) {
-  const docId = useFormValue(["_id"]) as string;
   const isbn = useFormValue(["isbn"]) as string | undefined;
   const title = useFormValue(["title"]) as string | undefined;
   const authors = useFormValue(["authors"]) as string[] | undefined;
@@ -156,7 +160,6 @@ export function BookCoverInput(props: ObjectInputProps) {
     setImportingId(c.id);
     setError(null);
     try {
-      // Fetch via our same-origin proxy — handles Google Books CORS too.
       const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(c.fullUrl)}`;
       const res = await fetch(proxyUrl);
       if (!res.ok) throw new Error(`Cover fetch failed: ${res.status}`);
@@ -165,19 +168,15 @@ export function BookCoverInput(props: ObjectInputProps) {
       const asset = await client.assets.upload("image", blob, {
         filename: `cover-${c.id}.jpg`,
       });
-      await client
-        .transaction()
-        .createIfNotExists({ _id: docId, _type: "book" })
-        .patch(docId, (p) =>
-          p.set({
-            cover: {
-              _type: "image",
-              asset: { _type: "reference", _ref: asset._id },
-              alt: title || "",
-            },
-          }),
-        )
-        .commit();
+      // Update via the form's onChange so Studio tracks this as a pending edit
+      // and the Publish button activates correctly.
+      props.onChange(
+        set({
+          _type: "image",
+          asset: { _type: "reference", _ref: asset._id },
+          alt: title || "",
+        }),
+      );
       setOpen(false);
       setCandidates([]);
     } catch (e) {
