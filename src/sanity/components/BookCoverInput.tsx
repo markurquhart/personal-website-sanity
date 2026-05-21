@@ -116,14 +116,17 @@ export function BookCoverInput(props: ObjectInputProps) {
     setImportingId(c.id);
     setError(null);
     try {
-      const res = await fetch(c.fullUrl);
-      if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
-      const blob = await res.blob();
-      const asset = await client.assets.upload(
-        "image",
-        new Blob([blob], { type: blob.type || "image/jpeg" }),
-        { filename: `cover-${c.id}.jpg` },
-      );
+      // Use Sanity's server-side upload-from-URL — avoids CORS on Google images.
+      const dataset = client.config().dataset;
+      const result = await client.request<{
+        document?: { _id?: string };
+      }>({
+        uri: `/assets/images/${dataset}?url=${encodeURIComponent(c.fullUrl)}`,
+        method: "POST",
+      });
+      const assetId = result?.document?._id;
+      if (!assetId) throw new Error("Sanity did not return an asset id");
+
       await client
         .transaction()
         .createIfNotExists({ _id: docId, _type: "book" })
@@ -131,7 +134,7 @@ export function BookCoverInput(props: ObjectInputProps) {
           p.set({
             cover: {
               _type: "image",
-              asset: { _type: "reference", _ref: asset._id },
+              asset: { _type: "reference", _ref: assetId },
               alt: title || "",
             },
           }),
@@ -149,8 +152,6 @@ export function BookCoverInput(props: ObjectInputProps) {
 
   return (
     <Stack space={3}>
-      {props.renderDefault(props)}
-
       <Flex justify="flex-end">
         <Button
           mode="ghost"
@@ -271,6 +272,8 @@ export function BookCoverInput(props: ObjectInputProps) {
           </Stack>
         </Card>
       )}
+
+      {props.renderDefault(props)}
     </Stack>
   );
 }

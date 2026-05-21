@@ -108,53 +108,20 @@ function mapGenres(googleCategories: string[] = []): string[] {
   return Array.from(matched);
 }
 
-// Fetch a cover image — try Open Library by ISBN (CORS-friendly) first,
-// fall back to Google Books' image (may fail CORS depending on browser).
-async function fetchCoverBlob(
+// Pick the best cover URL to upload — prefer Open Library by ISBN, fall back to Google Books.
+function pickCoverUrl(
   isbn: string | undefined,
   googleThumb: string | undefined,
-): Promise<{ blob: Blob; filename: string } | null> {
-  // 1) Open Library by ISBN (size=L is large, default=false returns 404 instead of placeholder)
+): string | null {
   if (isbn) {
-    try {
-      const url = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const buf = await res.arrayBuffer();
-        if (buf.byteLength > 1000) {
-          return {
-            blob: new Blob([buf], { type: "image/jpeg" }),
-            filename: `cover-${isbn}.jpg`,
-          };
-        }
-      }
-    } catch (e) {
-      console.warn("Open Library cover lookup failed:", e);
-    }
+    return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
   }
-
-  // 2) Google Books thumbnail — try a larger zoom; may CORS-fail silently
   if (googleThumb) {
-    try {
-      const url = googleThumb
-        .replace(/^http:/, "https:")
-        .replace(/&edge=curl/, "")
-        .replace(/&zoom=\d/, "&zoom=3");
-      const res = await fetch(url);
-      if (res.ok) {
-        const buf = await res.arrayBuffer();
-        if (buf.byteLength > 1000) {
-          return {
-            blob: new Blob([buf], { type: "image/jpeg" }),
-            filename: `cover-google-${Date.now()}.jpg`,
-          };
-        }
-      }
-    } catch (e) {
-      console.warn("Google Books cover fetch failed:", e);
-    }
+    return googleThumb
+      .replace(/^http:/, "https:")
+      .replace(/&edge=curl/, "")
+      .replace(/&zoom=\d/, "&zoom=3");
   }
-
   return null;
 }
 
@@ -230,18 +197,26 @@ export function BookLookupInput(_props: StringInputProps) {
       const mappedGenres = mapGenres(info.categories);
       if (mappedGenres.length > 0) patches.genres = mappedGenres;
 
-      // Cover image — Open Library first (CORS-friendly), then Google fallback
-      const cover = await fetchCoverBlob(isbn, info.imageLinks?.thumbnail);
-      if (cover) {
+      // Cover image — use Sanity's server-side fetch (avoids CORS).
+      // Prefer Open Library by ISBN, fall back to Google Books thumbnail.
+      const coverUrl = pickCoverUrl(isbn, info.imageLinks?.thumbnail);
+      if (coverUrl) {
         try {
-          const asset = await client.assets.upload("image", cover.blob, {
-            filename: cover.filename,
+          const dataset = client.config().dataset;
+          const result = await client.request<{
+            document?: { _id?: string };
+          }>({
+            uri: `/assets/images/${dataset}?url=${encodeURIComponent(coverUrl)}`,
+            method: "POST",
           });
-          patches.cover = {
-            _type: "image",
-            asset: { _type: "reference", _ref: asset._id },
-            alt: info.title || "",
-          };
+          const assetId = result?.document?._id;
+          if (assetId) {
+            patches.cover = {
+              _type: "image",
+              asset: { _type: "reference", _ref: assetId },
+              alt: info.title || "",
+            };
+          }
         } catch (e) {
           console.warn("Cover upload to Sanity failed:", e);
         }
