@@ -1,6 +1,6 @@
 "use client";
 
-import { SearchIcon } from "@sanity/icons";
+import { BookIcon, CheckmarkIcon, SearchIcon } from "@sanity/icons";
 import {
   Box,
   Button,
@@ -258,152 +258,233 @@ export function BookLookupInput(_props: StringInputProps) {
     }
   };
 
-  return (
-    <Stack space={3}>
-      <Card
-        padding={3}
-        radius={2}
-        tone="primary"
-        border
-        style={{ borderColor: "var(--card-border-color)" }}
-      >
-        <Stack space={3}>
-          <Text size={1} muted>
-            Search Google Books to autofill the book&apos;s metadata and cover
-            image in one step. The cover can be swapped after with{" "}
-            <strong>Find more covers</strong> below.
-          </Text>
-          <Flex gap={2}>
-            <Box flex={1}>
-              <TextInput
-                value={query}
-                onChange={(e) => setQuery(e.currentTarget.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    search();
-                  }
-                }}
-                placeholder="Title, author, or ISBN…"
-                icon={SearchIcon}
-                disabled={loading}
-              />
-            </Box>
-            <Button
-              text={loading ? "Searching…" : "Search"}
-              onClick={search}
-              disabled={loading || !query.trim()}
-              tone="primary"
-            />
-          </Flex>
+  const showStatus = (importingId && stage) || error || importedTitle;
 
-          {importingId && stage && (
-            <Card tone="primary" padding={2} radius={2}>
+  return (
+    <Card
+      padding={4}
+      radius={3}
+      shadow={1}
+      style={{ background: "var(--card-bg-color)" }}
+    >
+      <Stack space={4}>
+        {/* Header */}
+        <Flex gap={3} align="flex-start">
+          <Box
+            style={{
+              flexShrink: 0,
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: "rgba(192, 57, 43, 0.08)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#c0392b",
+            }}
+          >
+            <BookIcon style={{ fontSize: 20 }} />
+          </Box>
+          <Box flex={1}>
+            <Text size={2} weight="semibold">
+              Find a book
+            </Text>
+            <Box marginTop={1}>
+              <Text size={1} muted>
+                Search Google Books to autofill metadata + cover in one click.
+              </Text>
+            </Box>
+          </Box>
+        </Flex>
+
+        {/* Search bar */}
+        <Flex gap={2}>
+          <Box flex={1}>
+            <TextInput
+              value={query}
+              onChange={(e) => setQuery(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  search();
+                }
+              }}
+              placeholder="Title, author, or ISBN…"
+              icon={SearchIcon}
+              disabled={loading || Boolean(importingId)}
+              fontSize={2}
+              padding={3}
+            />
+          </Box>
+          <Button
+            text={loading ? "Searching" : "Search"}
+            onClick={search}
+            disabled={loading || !query.trim() || Boolean(importingId)}
+            tone="primary"
+            fontSize={2}
+            padding={3}
+          />
+        </Flex>
+
+        {/* Inline status row */}
+        {showStatus ? (
+          <Box>
+            {importingId && stage && (
               <Flex gap={2} align="center">
                 <Spinner muted />
-                <Text size={1}>{stage}</Text>
+                <Text size={1} muted>
+                  {stage}
+                </Text>
               </Flex>
-            </Card>
-          )}
+            )}
+            {error && !importingId && (
+              <Flex gap={2} align="center">
+                <Text size={1} style={{ color: "#c0392b" }}>
+                  {error}
+                </Text>
+              </Flex>
+            )}
+            {importedTitle && !importingId && !error && (
+              <Flex gap={2} align="center">
+                <Text size={1} style={{ color: "#2e7d32" }}>
+                  <CheckmarkIcon style={{ verticalAlign: "middle" }} />
+                </Text>
+                <Text size={1}>
+                  Imported <strong>{importedTitle}</strong> — review fields
+                  below and Publish when ready.
+                </Text>
+              </Flex>
+            )}
+          </Box>
+        ) : null}
 
-          {error && (
-            <Card tone="critical" padding={2} radius={2}>
-              <Text size={1}>{error}</Text>
-            </Card>
-          )}
-
-          {importedTitle && (
-            <Card tone="positive" padding={2} radius={2}>
-              <Text size={1}>
-                ✓ Imported <strong>{importedTitle}</strong>. Review the fields
-                below and click Publish when ready.
+        {/* Results */}
+        {results.length > 0 && (
+          <Stack space={1} marginTop={2}>
+            <Box marginBottom={1} paddingX={1}>
+              <Text
+                size={0}
+                muted
+                style={{
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  fontWeight: 600,
+                }}
+              >
+                {results.length} result{results.length !== 1 ? "s" : ""}
               </Text>
-            </Card>
-          )}
-
-          {results.length > 0 && (
-            <Stack space={2}>
-              {results.map((v) => {
-                const info = v.volumeInfo;
-                const isImporting = importingId === v.id;
-                return (
-                  <Card
-                    key={v.id}
-                    padding={3}
-                    radius={2}
-                    shadow={1}
-                    tone={isImporting ? "primary" : "default"}
-                    onClick={() => !importingId && importVolume(v)}
-                    style={{
-                      cursor: importingId ? "default" : "pointer",
-                      opacity: importingId && !isImporting ? 0.4 : 1,
-                    }}
-                  >
-                    <Flex gap={3} align="flex-start">
-                      {info.imageLinks?.thumbnail ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={info.imageLinks.thumbnail.replace(
-                            /^http:/,
-                            "https:",
-                          )}
-                          alt=""
+            </Box>
+            {results.map((v) => {
+              const info = v.volumeInfo;
+              const isImporting = importingId === v.id;
+              const cantClick = Boolean(importingId);
+              return (
+                <Box
+                  key={v.id}
+                  onClick={() => !cantClick && importVolume(v)}
+                  style={{
+                    cursor: cantClick ? "default" : "pointer",
+                    opacity: cantClick && !isImporting ? 0.35 : 1,
+                    padding: "10px 12px",
+                    borderRadius: 6,
+                    background: isImporting
+                      ? "rgba(192, 57, 43, 0.06)"
+                      : "transparent",
+                    transition: "background 120ms ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!cantClick) {
+                      (e.currentTarget as HTMLDivElement).style.background =
+                        "rgba(0, 0, 0, 0.04)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isImporting) {
+                      (e.currentTarget as HTMLDivElement).style.background =
+                        "transparent";
+                    }
+                  }}
+                >
+                  <Flex gap={3} align="center">
+                    {info.imageLinks?.thumbnail ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={info.imageLinks.thumbnail.replace(
+                          /^http:/,
+                          "https:",
+                        )}
+                        alt=""
+                        style={{
+                          width: 40,
+                          height: 60,
+                          objectFit: "cover",
+                          flexShrink: 0,
+                          borderRadius: 3,
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                        }}
+                      />
+                    ) : (
+                      <Box
+                        style={{
+                          width: 40,
+                          height: 60,
+                          background: "#eee",
+                          borderRadius: 3,
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                    <Box flex={1} style={{ minWidth: 0 }}>
+                      <Text
+                        size={1}
+                        weight="semibold"
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {info.title}
+                      </Text>
+                      <Box marginTop={1}>
+                        <Text
+                          size={1}
+                          muted
                           style={{
-                            width: 44,
-                            height: 66,
-                            objectFit: "cover",
-                            flexShrink: 0,
-                            borderRadius: 3,
+                            display: "block",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
                           }}
-                        />
-                      ) : (
-                        <Box
-                          style={{
-                            width: 44,
-                            height: 66,
-                            background: "#eee",
-                            borderRadius: 3,
-                            flexShrink: 0,
-                          }}
-                        />
-                      )}
-                      <Box flex={1}>
-                        <Text weight="semibold" size={1}>
-                          {info.title}
+                        >
+                          {(info.authors || ["Unknown author"]).join(", ")}
+                          {info.publishedDate &&
+                            ` · ${info.publishedDate.slice(0, 4)}`}
+                          {info.pageCount && ` · ${info.pageCount}p`}
                         </Text>
-                        {info.subtitle && (
-                          <Box marginTop={1}>
-                            <Text muted size={1}>
-                              {info.subtitle}
-                            </Text>
-                          </Box>
-                        )}
-                        <Box marginTop={2}>
-                          <Text muted size={1}>
-                            {(info.authors || []).join(", ")}
-                            {info.publishedDate &&
-                              ` · ${info.publishedDate.slice(0, 4)}`}
-                            {info.pageCount && ` · ${info.pageCount} pages`}
-                          </Text>
-                        </Box>
                       </Box>
-                      <Box>
-                        {isImporting ? (
-                          <Spinner muted />
-                        ) : (
-                          <Text size={1} weight="medium">
-                            Import →
-                          </Text>
-                        )}
-                      </Box>
-                    </Flex>
-                  </Card>
-                );
-              })}
-            </Stack>
-          )}
-        </Stack>
-      </Card>
-    </Stack>
+                    </Box>
+                    <Box style={{ flexShrink: 0 }}>
+                      {isImporting ? (
+                        <Spinner muted />
+                      ) : (
+                        <Text
+                          size={1}
+                          muted
+                          style={{ fontWeight: 500, color: "#c0392b" }}
+                        >
+                          Import →
+                        </Text>
+                      )}
+                    </Box>
+                  </Flex>
+                </Box>
+              );
+            })}
+          </Stack>
+        )}
+      </Stack>
+    </Card>
   );
 }
