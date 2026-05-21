@@ -158,6 +158,10 @@ After deploying:
 1. Add the production URL to **Sanity CORS** (`https://sanity.io/manage` → API → CORS)
 2. Custom domain via **Vercel** → Settings → Domains → `markurquhart.com`
 
+## Working on this codebase
+
+See [`AGENTS.md`](./AGENTS.md) for the layout, responsive, schema, and analytics rules. These are loaded automatically into Claude Code / Cursor sessions on this repo and act as the canonical guide for any new component, section, or page. Read it first before adding anything.
+
 ## Credits
 
 Original design lifted from the prior Webflow site to ease the transition.
