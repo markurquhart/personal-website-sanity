@@ -38,23 +38,48 @@ async function validateImageBlob(blob: Blob): Promise<void> {
   });
 }
 
-// After Sanity returns the upload result, the asset doc exists but the CDN
-// URL can briefly 404 while their edge nodes warm up. Polling avoids the
-// case where Studio renders the new cover reference before the URL is live,
-// which leaves the preview stuck on a loading state.
-async function waitForAssetUrl(
-  url: string,
-  maxRetries = 20,
-  delayMs = 500,
-): Promise<boolean> {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const r = await fetch(url, { method: "HEAD", cache: "no-store" });
-      if (r.ok) return true;
-    } catch {}
-    await new Promise((r) => setTimeout(r, delayMs));
+// The real source of the "stuck loading" bug: client.assets.upload resolves
+// when the asset doc exists, but Sanity still has work to do — generate the
+// LQIP/metadata, and process on-demand transformations for the URLs Studio
+// uses in image previews (e.g., ?w=200&h=300&fit=crop). If we patch the
+// cover reference before all of that is ready, Studio re-mounts the form
+// (via its realtime listener), the image component re-fetches a transformed
+// URL with a cold CDN cache, and the preview hangs on "Loading".
+//
+// This helper:
+//   1) polls the asset doc until metadata.lqip is populated (= Sanity finished
+//      processing)
+//   2) pre-warms common transformed URLs so the CDN has them cached before
+//      Studio asks
+async function waitForAssetReady(
+  client: ReturnType<typeof useClient>,
+  assetId: string,
+): Promise<string | null> {
+  for (let i = 0; i < 20; i++) {
+    const fresh = await client.fetch<{
+      url?: string;
+      metadata?: { lqip?: string };
+    } | null>(`*[_id == $id][0]{ url, metadata }`, { id: assetId });
+
+    if (fresh?.url && fresh?.metadata?.lqip) {
+      // Pre-warm common preview URLs so Studio's first render after patch
+      // doesn't hit a cold cache.
+      await Promise.allSettled([
+        fetch(fresh.url, { method: "HEAD", cache: "no-store" }),
+        fetch(`${fresh.url}?w=200&h=300&fit=crop`, {
+          method: "HEAD",
+          cache: "no-store",
+        }),
+        fetch(`${fresh.url}?w=400&h=600&fit=crop`, {
+          method: "HEAD",
+          cache: "no-store",
+        }),
+      ]);
+      return fresh.url;
+    }
+    await new Promise((r) => setTimeout(r, 500));
   }
-  return false;
+  return null;
 }
 
 type Candidate = {
@@ -230,14 +255,13 @@ export function BookCoverInput(props: ObjectInputProps) {
         filename: `cover-${c.id}.jpg`,
       });
 
-      // 4) Wait until Sanity's CDN actually serves this asset (avoids the
-      // stuck-loading state where Studio renders a reference whose URL
-      // isn't live yet).
-      setStage("Verifying CDN…");
-      const ready = await waitForAssetUrl(asset.url);
+      // 4) Wait for Sanity to fully process the asset + pre-warm CDN cache
+      // for the transformed URLs Studio uses in image previews.
+      setStage("Processing on Sanity…");
+      const ready = await waitForAssetReady(client, asset._id);
       if (!ready) {
         throw new Error(
-          "Sanity took too long to publish the asset to its CDN. Try again in a moment.",
+          "Sanity took too long to process the image. Try again in a moment.",
         );
       }
 
