@@ -58,7 +58,7 @@ export function BookLookupInput(_props: StringInputProps) {
       const res = await fetch(url);
       if (res.status === 429) {
         throw new Error(
-          "Google Books rate-limited the request. Wait ~60 seconds, or add a NEXT_PUBLIC_GOOGLE_BOOKS_API env var to lift the quota.",
+          "Google Books rate-limited the request. Wait ~60 seconds and try again.",
         );
       }
       if (!res.ok) throw new Error(`Search failed: ${res.status}`);
