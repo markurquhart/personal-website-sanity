@@ -116,17 +116,15 @@ export function BookCoverInput(props: ObjectInputProps) {
     setImportingId(c.id);
     setError(null);
     try {
-      // Use Sanity's server-side upload-from-URL — avoids CORS on Google images.
-      const dataset = client.config().dataset;
-      const result = await client.request<{
-        document?: { _id?: string };
-      }>({
-        uri: `/assets/images/${dataset}?url=${encodeURIComponent(c.fullUrl)}`,
-        method: "POST",
+      // Same approach as the initial book import: fetch the URL, upload the blob.
+      // Works for Open Library (CORS OK). May fail for Google Books image CDN.
+      const res = await fetch(c.fullUrl);
+      if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+      const blob = await res.blob();
+      if (blob.size < 1000) throw new Error("Cover image looks empty");
+      const asset = await client.assets.upload("image", blob, {
+        filename: `cover-${c.id}.jpg`,
       });
-      const assetId = result?.document?._id;
-      if (!assetId) throw new Error("Sanity did not return an asset id");
-
       await client
         .transaction()
         .createIfNotExists({ _id: docId, _type: "book" })
@@ -134,7 +132,7 @@ export function BookCoverInput(props: ObjectInputProps) {
           p.set({
             cover: {
               _type: "image",
-              asset: { _type: "reference", _ref: assetId },
+              asset: { _type: "reference", _ref: asset._id },
               alt: title || "",
             },
           }),
@@ -144,7 +142,11 @@ export function BookCoverInput(props: ObjectInputProps) {
       setCandidates([]);
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : "Failed to set cover");
+      setError(
+        e instanceof Error
+          ? `${e.message}. Try a different cover or upload manually.`
+          : "Failed to set cover",
+      );
     } finally {
       setImportingId(null);
     }
