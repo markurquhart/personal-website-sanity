@@ -1,6 +1,7 @@
 import { BookIcon } from "@sanity/icons";
 import { defineArrayMember, defineField, defineType } from "sanity";
 
+import { BookCoverInput } from "../../components/BookCoverInput";
 import { BookLookupInput } from "../../components/BookLookupInput";
 
 export const BOOK_STATUSES = [
@@ -115,6 +116,9 @@ export const book = defineType({
       fields: [
         defineField({ name: "alt", title: "Alt text", type: "string" }),
       ],
+      components: {
+        input: BookCoverInput,
+      },
     }),
     defineField({
       name: "isbn",
