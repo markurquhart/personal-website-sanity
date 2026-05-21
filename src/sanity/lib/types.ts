@@ -29,17 +29,20 @@ export type SiteSettings = {
 
 export type HomePage = {
   intro?: string | null;
-  heroPhotos?: Photo[] | null;
+  heroPhotos?: HomeSlide[] | null;
   sections?: unknown[] | null;
 };
 
-export type Photo = {
+export type HomeSlide = {
   _id: string;
   location?: string | null;
   takenAt?: string | null;
   caption?: string | null;
   image?: SanityImageAsset | null;
 };
+
+// Back-compat alias while components still reference the older name
+export type Photo = HomeSlide;
 
 export type PostSummary = {
   _id: string;

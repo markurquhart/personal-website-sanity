@@ -24,7 +24,7 @@ export const homePage = defineType({
       of: [
         defineArrayMember({
           type: "reference",
-          to: [{ type: "photo" }],
+          to: [{ type: "homeSlide" }],
         }),
       ],
       validation: (rule) => rule.unique(),

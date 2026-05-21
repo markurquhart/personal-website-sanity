@@ -1,9 +1,9 @@
 import { ImageIcon } from "@sanity/icons";
 import { defineField, defineType } from "sanity";
 
-export const photo = defineType({
-  name: "photo",
-  title: "Photo",
+export const homeSlide = defineType({
+  name: "homeSlide",
+  title: "Home Slider",
   type: "document",
   icon: ImageIcon,
   fields: [
