@@ -5,7 +5,10 @@ import { useMemo, useState } from "react";
 import { BookCard } from "@/components/BookCard";
 import type { BookStatus, BookSummary } from "@/sanity/lib/types";
 
-const TABS: { label: string; value: BookStatus | "all"; emptyText: string }[] = [
+type TabKey = BookStatus | "all";
+
+const TABS: { label: string; value: TabKey; emptyText: string }[] = [
+  { label: "All", value: "all", emptyText: "Nothing in the library yet." },
   {
     label: "Currently Reading",
     value: "currently-reading",
@@ -20,7 +23,22 @@ const TABS: { label: string; value: BookStatus | "all"; emptyText: string }[] = 
   { label: "Paused", value: "paused", emptyText: "Nothing paused." },
 ];
 
-function sortFor(status: BookStatus | "all", books: BookSummary[]) {
+// Order of sections within the "All" view
+const SECTION_ORDER: BookStatus[] = [
+  "currently-reading",
+  "up-next",
+  "paused",
+  "completed",
+];
+
+const SECTION_LABEL: Record<BookStatus, string> = {
+  "currently-reading": "Currently Reading",
+  "up-next": "Up Next",
+  paused: "Paused",
+  completed: "Completed",
+};
+
+function sortFor(status: BookStatus, books: BookSummary[]) {
   const arr = [...books];
   if (status === "completed") {
     arr.sort(
@@ -47,17 +65,27 @@ function sortFor(status: BookStatus | "all", books: BookSummary[]) {
 }
 
 export function LibraryContent({ books }: { books: BookSummary[] }) {
-  const [active, setActive] = useState<BookStatus | "all">("currently-reading");
+  const [active, setActive] = useState<TabKey>("all");
   const [genre, setGenre] = useState<string | "all">("all");
 
+  // Apply genre filter once, before grouping/sorting per status
+  const filteredBooks = useMemo(
+    () =>
+      genre === "all"
+        ? books
+        : books.filter((b) => (b.genres || []).includes(genre)),
+    [books, genre],
+  );
+
+  // Group by status for both the "All" sections and per-tab counts
   const grouped = useMemo(() => {
     const by: Record<string, BookSummary[]> = {};
-    for (const b of books) {
+    for (const b of filteredBooks) {
       const k = b.status || "up-next";
       (by[k] ||= []).push(b);
     }
     return by;
-  }, [books]);
+  }, [filteredBooks]);
 
   const allGenres = useMemo(() => {
     const g = new Set<string>();
@@ -65,20 +93,17 @@ export function LibraryContent({ books }: { books: BookSummary[] }) {
     return Array.from(g).sort();
   }, [books]);
 
-  const visible = useMemo(() => {
-    const list = grouped[active] || [];
-    const filtered =
-      genre === "all" ? list : list.filter((b) => (b.genres || []).includes(genre));
-    return sortFor(active, filtered);
-  }, [grouped, active, genre]);
-
-  const counts = useMemo(
-    () =>
-      Object.fromEntries(
-        TABS.map((t) => [t.value, (grouped[t.value] || []).length]),
-      ) as Record<string, number>,
-    [grouped],
-  );
+  // Counts for the pill labels are from the unfiltered set so users can
+  // see total per status at a glance.
+  const totalCounts = useMemo(() => {
+    const by: Record<string, number> = {};
+    for (const b of books) {
+      const k = b.status || "up-next";
+      by[k] = (by[k] || 0) + 1;
+    }
+    by.all = books.length;
+    return by;
+  }, [books]);
 
   return (
     <div className="flex min-h-screen flex-col gap-8 px-5 py-[22px] pb-[42px] xl:px-0">
@@ -105,7 +130,7 @@ export function LibraryContent({ books }: { books: BookSummary[] }) {
               }`}
             >
               {t.label}
-              {counts[t.value] > 0 ? ` (${counts[t.value]})` : ""}
+              {totalCounts[t.value] > 0 ? ` (${totalCounts[t.value]})` : ""}
             </button>
           ))}
         </div>
@@ -128,17 +153,89 @@ export function LibraryContent({ books }: { books: BookSummary[] }) {
         )}
       </div>
 
-      {visible.length === 0 ? (
-        <p className="text-[14px] text-[#888]">
-          {TABS.find((t) => t.value === active)?.emptyText}
-        </p>
+      {active === "all" ? (
+        <AllView grouped={grouped} totalCount={filteredBooks.length} />
       ) : (
-        <section className="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-          {visible.map((b) => (
-            <BookCard key={b._id} book={b} />
-          ))}
-        </section>
+        <SingleStatusView
+          status={active}
+          books={sortFor(active, grouped[active] || [])}
+          emptyText={
+            TABS.find((t) => t.value === active)?.emptyText ?? "Nothing here."
+          }
+        />
       )}
     </div>
+  );
+}
+
+function AllView({
+  grouped,
+  totalCount,
+}: {
+  grouped: Record<string, BookSummary[]>;
+  totalCount: number;
+}) {
+  if (totalCount === 0) {
+    return (
+      <p className="text-[14px] text-[#888]">
+        Nothing in the library yet.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-10">
+      {SECTION_ORDER.map((status) => {
+        const list = sortFor(status, grouped[status] || []);
+        if (list.length === 0) return null;
+        return (
+          <section key={status} className="flex flex-col gap-4">
+            <div className="flex items-baseline justify-between border-b border-[#e5e5e5] pb-2">
+              <h2 className="m-0 font-display text-[1.25rem] font-semibold text-[#333]">
+                {SECTION_LABEL[status]}
+              </h2>
+              <span className="text-[12px] uppercase tracking-[0.05em] text-[#999]">
+                {list.length} {list.length === 1 ? "book" : "books"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+              {list.map((b) => (
+                <BookCard key={b._id} book={b} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function SingleStatusView({
+  status,
+  books,
+  emptyText,
+}: {
+  status: BookStatus;
+  books: BookSummary[];
+  emptyText: string;
+}) {
+  if (books.length === 0) {
+    return <p className="text-[14px] text-[#888]">{emptyText}</p>;
+  }
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-baseline justify-between border-b border-[#e5e5e5] pb-2">
+        <h2 className="m-0 font-display text-[1.25rem] font-semibold text-[#333]">
+          {SECTION_LABEL[status]}
+        </h2>
+        <span className="text-[12px] uppercase tracking-[0.05em] text-[#999]">
+          {books.length} {books.length === 1 ? "book" : "books"}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+        {books.map((b) => (
+          <BookCard key={b._id} book={b} />
+        ))}
+      </div>
+    </section>
   );
 }
