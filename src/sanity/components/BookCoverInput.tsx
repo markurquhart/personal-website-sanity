@@ -19,21 +19,16 @@ import {
   type ObjectInputProps,
 } from "sanity";
 
-// Decode the blob with the browser's Image API to confirm it's actually a
-// valid image before sending it to Sanity. Catches truncated downloads,
-// HTML error pages mislabeled as images, etc.
-async function validateImageBlob(blob: Blob): Promise<{ w: number; h: number }> {
+// Validate the blob decodes as an image before sending to Sanity. Catches
+// truncated downloads, HTML error pages mislabeled as images, etc.
+async function validateImageBlob(blob: Blob): Promise<void> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
-      const dims = { w: img.naturalWidth, h: img.naturalHeight };
+      const ok = img.naturalWidth > 0 && img.naturalHeight > 0;
       URL.revokeObjectURL(url);
-      if (dims.w === 0 || dims.h === 0) {
-        reject(new Error("Image decoded to 0×0 — likely corrupt"));
-      } else {
-        resolve(dims);
-      }
+      ok ? resolve() : reject(new Error("Image decoded to 0×0 — corrupt"));
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -41,6 +36,25 @@ async function validateImageBlob(blob: Blob): Promise<{ w: number; h: number }> 
     };
     img.src = url;
   });
+}
+
+// After Sanity returns the upload result, the asset doc exists but the CDN
+// URL can briefly 404 while their edge nodes warm up. Polling avoids the
+// case where Studio renders the new cover reference before the URL is live,
+// which leaves the preview stuck on a loading state.
+async function waitForAssetUrl(
+  url: string,
+  maxRetries = 20,
+  delayMs = 500,
+): Promise<boolean> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const r = await fetch(url, { method: "HEAD", cache: "no-store" });
+      if (r.ok) return true;
+    } catch {}
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return false;
 }
 
 type Candidate = {
@@ -62,6 +76,7 @@ export function BookCoverInput(props: ObjectInputProps) {
   const [loading, setLoading] = useState(false);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [stage, setStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const client = useClient({ apiVersion: "2026-05-21" });
 
@@ -187,8 +202,10 @@ export function BookCoverInput(props: ObjectInputProps) {
   const useCandidate = async (c: Candidate) => {
     setImportingId(c.id);
     setError(null);
+    setStage(null);
     try {
-      // 1) Fetch via proxy with timeout
+      // 1) Fetch image bytes via proxy
+      setStage("Downloading cover…");
       const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(c.fullUrl)}`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -198,26 +215,34 @@ export function BookCoverInput(props: ObjectInputProps) {
       } finally {
         clearTimeout(timeoutId);
       }
-      if (!res.ok) throw new Error(`Cover fetch failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
 
-      // 2) Get blob + sanity-check size + content type
+      // 2) Validate
       const blob = await res.blob();
       if (blob.size < 1000) throw new Error("Cover image looks empty");
       if (!blob.type.startsWith("image/"))
         throw new Error(`Got non-image response (${blob.type})`);
-
-      // 3) Decode the image in the browser to confirm it's valid before
-      // wasting a Sanity asset slot on a broken file.
       await validateImageBlob(blob);
 
-      // 4) Upload to Sanity. The upload promise resolves only when the asset
-      // is fully ingested.
+      // 3) Upload to Sanity
+      setStage("Uploading to Sanity…");
       const asset = await client.assets.upload("image", blob, {
         filename: `cover-${c.id}.jpg`,
       });
 
-      // 5) Patch the cover field via document operations (same path the
-      // lookup import uses — proven reliable).
+      // 4) Wait until Sanity's CDN actually serves this asset (avoids the
+      // stuck-loading state where Studio renders a reference whose URL
+      // isn't live yet).
+      setStage("Verifying CDN…");
+      const ready = await waitForAssetUrl(asset.url);
+      if (!ready) {
+        throw new Error(
+          "Sanity took too long to publish the asset to its CDN. Try again in a moment.",
+        );
+      }
+
+      // 5) Patch the cover field (now safe — URL is live)
+      setStage("Saving…");
       docOp.patch.execute([
         {
           set: {
@@ -230,10 +255,12 @@ export function BookCoverInput(props: ObjectInputProps) {
         },
       ]);
 
+      setStage(null);
       setOpen(false);
       setCandidates([]);
     } catch (e) {
       console.error(e);
+      setStage(null);
       setError(
         e instanceof Error
           ? `${e.message}. Try a different cover or upload manually.`
@@ -287,6 +314,15 @@ export function BookCoverInput(props: ObjectInputProps) {
                 }}
               />
             </Flex>
+
+            {importingId && stage && (
+              <Card tone="primary" padding={2} radius={2}>
+                <Flex gap={2} align="center">
+                  <Spinner muted />
+                  <Text size={1}>{stage}</Text>
+                </Flex>
+              </Card>
+            )}
 
             {error && (
               <Card tone="critical" padding={2} radius={2}>
