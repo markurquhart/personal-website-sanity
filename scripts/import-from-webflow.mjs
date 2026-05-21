@@ -4,12 +4,14 @@
 
 import { createClient } from "@sanity/client";
 
-const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID || "<project-id>";
-const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET || "production";
+const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID;
+const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET;
 const token = process.env.SANITY_TOKEN;
 
-if (!token) {
-  console.error("Set SANITY_TOKEN env var (admin/editor token)");
+if (!projectId || !dataset || !token) {
+  console.error(
+    "Set NEXT_PUBLIC_SANITY_PROJECT_ID, NEXT_PUBLIC_SANITY_DATASET, and SANITY_TOKEN env vars",
+  );
   process.exit(1);
 }
 
