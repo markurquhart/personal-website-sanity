@@ -113,7 +113,7 @@ function mapGenres(googleCategories: string[] = []): string[] {
   return Array.from(matched);
 }
 
-async function fetchWithTimeout(url: string, timeoutMs = 8000) {
+async function fetchWithTimeout(url: string, timeoutMs = 15000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -181,6 +181,7 @@ export function BookLookupInput(_props: StringInputProps) {
   const [results, setResults] = useState<Volume[]>([]);
   const [loading, setLoading] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [stage, setStage] = useState<string | null>(null);
   const [importedTitle, setImportedTitle] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const client = useClient({ apiVersion: "2026-05-21" });
@@ -219,9 +220,11 @@ export function BookLookupInput(_props: StringInputProps) {
     }
     setImportingId(v.id);
     setError(null);
+    setStage(null);
     try {
       const info = v.volumeInfo;
       const patches: Record<string, unknown> = {};
+      setStage("Preparing book details…");
 
       if (info.title) {
         patches.title = info.title;
@@ -247,22 +250,25 @@ export function BookLookupInput(_props: StringInputProps) {
       const mappedGenres = mapGenres(info.categories);
       if (mappedGenres.length > 0) patches.genres = mappedGenres;
 
-      // Cover image — non-blocking. If fetch/upload fails or times out,
-      // we still commit the rest of the patches.
-      try {
+      // Cover image — blocking. If fetch/upload fails the entire import
+      // fails (atomic) so the user is never left with a half-saved book.
+      if (isbn || info.imageLinks?.thumbnail) {
+        setStage("Fetching cover image…");
         const cover = await fetchCoverBlob(isbn, info.imageLinks?.thumbnail);
-        if (cover) {
-          const asset = await client.assets.upload("image", cover.blob, {
-            filename: cover.filename,
-          });
-          patches.cover = {
-            _type: "image",
-            asset: { _type: "reference", _ref: asset._id },
-            alt: info.title || "",
-          };
+        if (!cover) {
+          throw new Error(
+            "Couldn't fetch a cover from Open Library or Google Books. Try a different result.",
+          );
         }
-      } catch (e) {
-        console.warn("Cover step failed (continuing without cover):", e);
+        setStage("Uploading cover to Sanity…");
+        const asset = await client.assets.upload("image", cover.blob, {
+          filename: cover.filename,
+        });
+        patches.cover = {
+          _type: "image",
+          asset: { _type: "reference", _ref: asset._id },
+          alt: info.title || "",
+        };
       }
 
       // External link to Google Books — only set if not already populated
@@ -278,14 +284,17 @@ export function BookLookupInput(_props: StringInputProps) {
         ];
       }
 
+      setStage("Saving to Sanity…");
       // Apply patches through the form's operation API so Studio tracks
       // the changes as pending edits (Publish button activates).
       docOp.patch.execute([{ set: patches }]);
+      setStage(null);
       setImportedTitle(info.title || v.id);
       setResults([]);
       setQuery("");
     } catch (e) {
       console.error(e);
+      setStage(null);
       setError(e instanceof Error ? e.message : "Import failed");
     } finally {
       setImportingId(null);
@@ -330,6 +339,15 @@ export function BookLookupInput(_props: StringInputProps) {
             />
           </Flex>
 
+          {importingId && stage && (
+            <Card tone="primary" padding={2} radius={2}>
+              <Flex gap={2} align="center">
+                <Spinner muted />
+                <Text size={1}>{stage}</Text>
+              </Flex>
+            </Card>
+          )}
+
           {error && (
             <Card tone="critical" padding={2} radius={2}>
               <Text size={1}>{error}</Text>
@@ -339,8 +357,8 @@ export function BookLookupInput(_props: StringInputProps) {
           {importedTitle && (
             <Card tone="positive" padding={2} radius={2}>
               <Text size={1}>
-                ✓ Imported <strong>{importedTitle}</strong>. Scroll down to
-                review fields.
+                ✓ Import complete: <strong>{importedTitle}</strong>. Review
+                fields below and hit Publish when ready.
               </Text>
             </Card>
           )}
