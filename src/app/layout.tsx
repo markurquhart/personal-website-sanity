@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { Inter, Inter_Tight } from "next/font/google";
 
+import {
+  GoogleTagManagerNoscript,
+  GoogleTagManagerScript,
+} from "@/components/GoogleTagManager";
 import { SanityLive } from "@/sanity/lib/live";
 
 import "./globals.css";
@@ -32,7 +36,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${interTight.variable}`}>
       <body className="antialiased">
+        <GoogleTagManagerNoscript />
         {children}
+        <GoogleTagManagerScript />
         <SanityLive />
       </body>
     </html>
