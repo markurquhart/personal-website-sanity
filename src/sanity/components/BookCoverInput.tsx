@@ -161,7 +161,14 @@ export function BookCoverInput(props: ObjectInputProps) {
     setError(null);
     try {
       const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(c.fullUrl)}`;
-      const res = await fetch(proxyUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      let res: Response;
+      try {
+        res = await fetch(proxyUrl, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!res.ok) throw new Error(`Cover fetch failed: ${res.status}`);
       const blob = await res.blob();
       if (blob.size < 1000) throw new Error("Cover image looks empty");

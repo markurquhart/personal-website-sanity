@@ -113,9 +113,18 @@ function mapGenres(googleCategories: string[] = []): string[] {
   return Array.from(matched);
 }
 
-// Fetch a cover image via the same-origin proxy (handles CORS for both
-// Open Library and Google Books). Tries Open Library by ISBN first, falls
-// back to Google's thumbnail.
+async function fetchWithTimeout(url: string, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+// Fetch a cover image via the same-origin proxy. Times out per source so
+// a slow Open Library / Google response never blocks the whole import.
 async function fetchCoverBlob(
   isbn: string | undefined,
   googleThumb: string | undefined,
@@ -125,7 +134,7 @@ async function fetchCoverBlob(
   if (isbn) {
     try {
       const url = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
-      const res = await fetch(proxy(url));
+      const res = await fetchWithTimeout(proxy(url));
       if (res.ok) {
         const buf = await res.arrayBuffer();
         if (buf.byteLength > 1000) {
@@ -136,7 +145,7 @@ async function fetchCoverBlob(
         }
       }
     } catch (e) {
-      console.warn("Open Library cover lookup failed:", e);
+      console.warn("Open Library cover lookup failed/timed out:", e);
     }
   }
   if (googleThumb) {
@@ -145,7 +154,7 @@ async function fetchCoverBlob(
         .replace(/^http:/, "https:")
         .replace(/&edge=curl/, "")
         .replace(/&zoom=\d/, "&zoom=3");
-      const res = await fetch(proxy(url));
+      const res = await fetchWithTimeout(proxy(url));
       if (res.ok) {
         const buf = await res.arrayBuffer();
         if (buf.byteLength > 1000) {
@@ -156,7 +165,7 @@ async function fetchCoverBlob(
         }
       }
     } catch (e) {
-      console.warn("Google Books cover fetch failed:", e);
+      console.warn("Google Books cover fetch failed/timed out:", e);
     }
   }
   return null;
@@ -238,11 +247,11 @@ export function BookLookupInput(_props: StringInputProps) {
       const mappedGenres = mapGenres(info.categories);
       if (mappedGenres.length > 0) patches.genres = mappedGenres;
 
-      // Cover image — fetch directly (works for Open Library; may CORS-fail
-      // for Google Books). Same approach used by the alternate cover picker.
-      const cover = await fetchCoverBlob(isbn, info.imageLinks?.thumbnail);
-      if (cover) {
-        try {
+      // Cover image — non-blocking. If fetch/upload fails or times out,
+      // we still commit the rest of the patches.
+      try {
+        const cover = await fetchCoverBlob(isbn, info.imageLinks?.thumbnail);
+        if (cover) {
           const asset = await client.assets.upload("image", cover.blob, {
             filename: cover.filename,
           });
@@ -251,9 +260,9 @@ export function BookLookupInput(_props: StringInputProps) {
             asset: { _type: "reference", _ref: asset._id },
             alt: info.title || "",
           };
-        } catch (e) {
-          console.warn("Cover upload to Sanity failed:", e);
         }
+      } catch (e) {
+        console.warn("Cover step failed (continuing without cover):", e);
       }
 
       // External link to Google Books — only set if not already populated
