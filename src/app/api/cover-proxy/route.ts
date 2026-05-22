@@ -1,9 +1,9 @@
-// Same-origin proxy for Google Books cover images. The Studio needs to
-// fetch() these bytes to upload them as Sanity assets — Google's image CDN
-// doesn't send CORS headers, so the browser blocks a direct fetch (an
-// `<img src=…>` would render fine but we can't read the bytes from it).
-//
-// Whitelisted to Google Books hosts only.
+// Same-origin proxy for book cover images. The Studio needs to fetch()
+// these bytes to upload them as Sanity assets — Google's image CDN doesn't
+// send CORS headers, so a direct fetch is blocked (an `<img src=…>` would
+// render fine but we can't read the bytes from it). Open Library's covers
+// endpoint does set CORS headers, but we still route through the proxy for
+// consistency and to keep the host allowlist in one place.
 
 import { NextResponse } from "next/server";
 
@@ -12,6 +12,7 @@ export const runtime = "edge";
 const ALLOWED_HOSTS = new Set([
   "books.google.com",
   "books.googleusercontent.com",
+  "covers.openlibrary.org",
 ]);
 
 async function handle(req: Request, headOnly: boolean) {

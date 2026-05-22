@@ -75,9 +75,47 @@ export async function fetchGoogleCover(
   }
 }
 
+// Fetch an Open Library cover by its numeric cover id (the `cover_i` field
+// on OL search results). `?default=false` tells OL to 404 rather than
+// returning a 1×1 placeholder when the id resolves to nothing.
+export async function fetchOpenLibraryCover(
+  coverId: string | number,
+  timeoutMs = 15000,
+): Promise<Blob> {
+  const upstream = `https://covers.openlibrary.org/b/id/${encodeURIComponent(
+    String(coverId),
+  )}-L.jpg?default=false`;
+  const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(upstream)}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(proxyUrl, { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`Open Library cover unavailable (${res.status})`);
+    }
+    const blob = await res.blob();
+    if (!blob.type.startsWith("image/")) {
+      throw new Error(`Unexpected response type (${blob.type || "unknown"})`);
+    }
+    const { width, height } = await decodeImage(blob);
+    if (width < 256 || height < 256) {
+      throw new Error("Open Library cover is too small to use");
+    }
+    return blob;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // Upload a verified blob to Sanity as an image asset and return the asset id.
-// Per Sanity's documented pattern: validate the blob client-side (we already
-// did above), then trust client.assets.upload's resolution.
+//
+// After the upload resolves we also poll until the asset document is
+// queryable via the API. Sanity's image-input preview subscribes to the
+// asset doc to render its thumbnail; if we patch the field's `_ref`
+// before that doc has propagated, the preview gets stuck in "Loading…".
+// Warming Studio's listener cache with an explicit fetch first means the
+// preview can resolve the reference immediately.
 export async function uploadCoverBlob(
   client: SanityClient,
   blob: Blob,
@@ -87,5 +125,21 @@ export async function uploadCoverBlob(
   if (!asset?._id) {
     throw new Error("Sanity upload returned no asset id");
   }
+  const start = Date.now();
+  const deadline = start + 6000;
+  while (Date.now() < deadline) {
+    try {
+      const doc = await client.fetch<{ url?: string } | null>(
+        `*[_id == $id][0]{url}`,
+        { id: asset._id },
+      );
+      if (doc?.url) return asset._id;
+    } catch {
+      // ignore transient query errors and retry
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  // Fall back to the asset id even if the warmup didn't complete — the
+  // patch will still work; the preview may briefly show "Loading…".
   return asset._id;
 }
