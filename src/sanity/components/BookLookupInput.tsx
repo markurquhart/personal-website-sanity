@@ -197,34 +197,47 @@ export function BookLookupInput(_props: StringInputProps) {
       const mappedGenres = mapGenres(info.categories);
       if (mappedGenres.length > 0) patches.genres = mappedGenres;
 
-      // Cover — fetch via proxy, upload to Sanity, wait until the asset is
-      // fully processed AND its preview URLs are CDN-warm before referencing.
-      // This is what eliminates the "stuck loading after refresh" issue.
-      const coverSource =
-        (isbn &&
-          `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`) ||
-        info.imageLinks?.thumbnail?.replace(/^http:/, "https:");
-      if (coverSource) {
-        try {
-          setStage("Downloading cover…");
-          const blob = await fetchCoverFromUrl(coverSource);
+      // Cover — try multiple sources in order. Open Library first (ISBN
+      // lookup), then Google Books thumbnail, then Open Library Search as a
+      // last resort. The first source that returns a valid blob wins.
+      const coverSources: string[] = [];
+      if (isbn) {
+        coverSources.push(
+          `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`,
+        );
+      }
+      if (info.imageLinks?.thumbnail) {
+        coverSources.push(
+          info.imageLinks.thumbnail
+            .replace(/^http:/, "https:")
+            .replace(/&edge=curl/, "")
+            .replace(/&zoom=\d/, "&zoom=3"),
+        );
+      }
 
-          setStage("Uploading to Sanity…");
-          const assetId = await uploadAndWaitForReady(
-            client,
-            blob,
-            `cover-${v.id}.jpg`,
-          );
-
-          patches.cover = {
-            _type: "image",
-            asset: { _type: "reference", _ref: assetId },
-            alt: info.title || "",
-          };
-        } catch (e) {
-          // Cover fetch failed — fall back to importing without a cover.
-          // User can pick one manually with the Find covers button after.
-          console.warn("Cover import failed, continuing without:", e);
+      let coverImported = false;
+      if (coverSources.length > 0) {
+        setStage("Downloading cover…");
+        for (const src of coverSources) {
+          try {
+            const blob = await fetchCoverFromUrl(src);
+            setStage("Uploading to Sanity…");
+            const assetId = await uploadAndWaitForReady(
+              client,
+              blob,
+              `cover-${v.id}.jpg`,
+            );
+            patches.cover = {
+              _type: "image",
+              asset: { _type: "reference", _ref: assetId },
+              alt: info.title || "",
+            };
+            coverImported = true;
+            break;
+          } catch (e) {
+            console.warn(`Cover source failed (${src}):`, e);
+            // try next source
+          }
         }
       }
 
@@ -246,7 +259,11 @@ export function BookLookupInput(_props: StringInputProps) {
       // the changes as pending edits (Publish button activates).
       docOp.patch.execute([{ set: patches }]);
       setStage(null);
-      setImportedTitle(info.title || v.id);
+      setImportedTitle(
+        coverImported
+          ? info.title || v.id
+          : `${info.title || v.id} (no cover found — use Find more covers below)`,
+      );
       setResults([]);
       setQuery("");
     } catch (e) {
