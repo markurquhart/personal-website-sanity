@@ -434,37 +434,40 @@ export function BookLookupInput(_props: StringInputProps) {
                         }}
                       />
                     )}
-                    <Box flex={1} style={{ minWidth: 0 }}>
-                      <Text
-                        size={1}
-                        weight="semibold"
+                    <Stack
+                      space={2}
+                      flex={1}
+                      style={{ minWidth: 0, overflow: "hidden" }}
+                    >
+                      <div
                         style={{
-                          display: "block",
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "var(--card-fg-color)",
+                          lineHeight: 1.3,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
                         }}
                       >
                         {info.title}
-                      </Text>
-                      <Box marginTop={1}>
-                        <Text
-                          size={1}
-                          muted
-                          style={{
-                            display: "block",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {(info.authors || ["Unknown author"]).join(", ")}
-                          {info.publishedDate &&
-                            ` · ${info.publishedDate.slice(0, 4)}`}
-                          {info.pageCount && ` · ${info.pageCount}p`}
-                        </Text>
-                      </Box>
-                    </Box>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "var(--card-muted-fg-color)",
+                          lineHeight: 1.4,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {(info.authors || ["Unknown author"]).join(", ")}
+                        {info.publishedDate &&
+                          ` · ${info.publishedDate.slice(0, 4)}`}
+                        {info.pageCount && ` · ${info.pageCount}p`}
+                      </div>
+                    </Stack>
                     <Box style={{ flexShrink: 0 }}>
                       {isImporting ? (
                         <Spinner muted />
