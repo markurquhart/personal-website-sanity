@@ -1,6 +1,6 @@
 "use client";
 
-import { ImagesIcon, RefreshIcon } from "@sanity/icons";
+import { ImagesIcon, RefreshIcon, UploadIcon } from "@sanity/icons";
 import {
   Box,
   Button,
@@ -10,19 +10,18 @@ import {
   Spinner,
   Stack,
   Text,
+  TextInput,
 } from "@sanity/ui";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
+  set,
+  unset,
   useClient,
-  useDocumentOperation,
   useFormValue,
   type ObjectInputProps,
 } from "sanity";
 
-import {
-  fetchCoverFromUrl,
-  uploadAndWaitForReady,
-} from "./bookCoverHelpers";
+import { fetchCoverFromUrl, uploadAndVerify } from "./bookCoverHelpers";
 
 type Candidate = {
   id: string;
@@ -31,11 +30,29 @@ type Candidate = {
   fullUrl: string;
 };
 
+type ImageValue = {
+  asset?: { _ref?: string };
+  alt?: string;
+};
+
+// Build a CDN URL for a Sanity asset ref. Asset refs look like:
+//   image-{hash}-{width}x{height}-{format}
+// e.g. "image-abc123def456-800x1200-jpg"
+function sanityImageUrl(
+  ref: string | undefined,
+  projectId: string,
+  dataset: string,
+  query?: string,
+): string | null {
+  if (!ref) return null;
+  const m = ref.match(/^image-([a-f0-9]+)-(\d+x\d+)-([a-z]+)$/i);
+  if (!m) return null;
+  const [, hash, dims, format] = m;
+  const base = `https://cdn.sanity.io/images/${projectId}/${dataset}/${hash}-${dims}.${format}`;
+  return query ? `${base}?${query}` : base;
+}
+
 export function BookCoverInput(props: ObjectInputProps) {
-  const docId = useFormValue(["_id"]) as string;
-  const docType = (useFormValue(["_type"]) as string) || "book";
-  const publishedId = docId?.replace(/^drafts\./, "") || "";
-  const docOp = useDocumentOperation(publishedId, docType);
   const isbn = useFormValue(["isbn"]) as string | undefined;
   const title = useFormValue(["title"]) as string | undefined;
   const authors = useFormValue(["authors"]) as string[] | undefined;
@@ -45,7 +62,16 @@ export function BookCoverInput(props: ObjectInputProps) {
   const [importingId, setImportingId] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const client = useClient({ apiVersion: "2026-05-21" });
+
+  const config = client.config();
+  const projectId = config.projectId || "";
+  const dataset = config.dataset || "";
+
+  const value = props.value as ImageValue | undefined;
+  const currentRef = value?.asset?._ref;
+  const previewUrl = sanityImageUrl(currentRef, projectId, dataset, "w=480");
 
   const findCovers = useCallback(async () => {
     setLoading(true);
@@ -54,7 +80,6 @@ export function BookCoverInput(props: ObjectInputProps) {
     try {
       const found: Candidate[] = [];
 
-      // 1) Open Library by ISBN
       if (isbn) {
         const olThumb = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-M.jpg?default=false`;
         const olFull = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
@@ -74,7 +99,6 @@ export function BookCoverInput(props: ObjectInputProps) {
         } catch {}
       }
 
-      // 2) Open Library Search — multiple editions, each with its own cover
       const olParams = new URLSearchParams();
       if (isbn) {
         olParams.set("isbn", isbn);
@@ -96,7 +120,9 @@ export function BookCoverInput(props: ObjectInputProps) {
             const full = `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg?default=false`;
             const label =
               (doc.publisher && doc.publisher[0]) ||
-              (doc.first_publish_year ? String(doc.first_publish_year) : "Open Library");
+              (doc.first_publish_year
+                ? String(doc.first_publish_year)
+                : "Open Library");
             found.push({
               id: `ol-id-${doc.cover_i}`,
               label,
@@ -109,7 +135,6 @@ export function BookCoverInput(props: ObjectInputProps) {
         console.warn("Open Library search failed:", e);
       }
 
-      // 3) Google Books — all editions of this book
       const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API;
       const keyParam = apiKey ? `&key=${apiKey}` : "";
       let gbQuery: string | null = null;
@@ -119,7 +144,6 @@ export function BookCoverInput(props: ObjectInputProps) {
         const a = (authors || [])[0] || "";
         gbQuery = `intitle:${title}${a ? `+inauthor:${a}` : ""}`;
       }
-
       if (gbQuery) {
         try {
           const gbUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(gbQuery)}&maxResults=10${keyParam}`;
@@ -149,14 +173,11 @@ export function BookCoverInput(props: ObjectInputProps) {
         }
       }
 
-      // De-dupe by thumbUrl
       const dedup = Array.from(
         new Map(found.map((c) => [c.thumbUrl, c])).values(),
       );
 
-      // Pre-validate each candidate via HEAD through the proxy. Open Library's
-      // search API sometimes returns cover_i values whose actual cover images
-      // 400/404, so filter those out before showing to the user.
+      // HEAD-validate each candidate so broken ones don't show up
       const validations = await Promise.allSettled(
         dedup.map(async (c) => {
           const r = await fetch(
@@ -167,9 +188,7 @@ export function BookCoverInput(props: ObjectInputProps) {
         }),
       );
       const validated = validations
-        .map((r) =>
-          r.status === "fulfilled" && r.value ? r.value : null,
-        )
+        .map((r) => (r.status === "fulfilled" && r.value ? r.value : null))
         .filter((c): c is Candidate => c !== null);
 
       setCandidates(validated);
@@ -184,6 +203,19 @@ export function BookCoverInput(props: ObjectInputProps) {
     }
   }, [isbn, title, authors]);
 
+  const applyCover = useCallback(
+    (assetId: string) => {
+      props.onChange(
+        set({
+          _type: "image",
+          asset: { _type: "reference", _ref: assetId },
+          alt: title || "",
+        }),
+      );
+    },
+    [props, title],
+  );
+
   const useCandidate = async (c: Candidate) => {
     setImportingId(c.id);
     setError(null);
@@ -193,24 +225,10 @@ export function BookCoverInput(props: ObjectInputProps) {
       const blob = await fetchCoverFromUrl(c.fullUrl);
 
       setStage("Uploading to Sanity…");
-      const assetId = await uploadAndWaitForReady(
-        client,
-        blob,
-        `cover-${c.id}.jpg`,
-      );
+      const assetId = await uploadAndVerify(client, blob, `cover-${c.id}.jpg`);
 
       setStage("Saving…");
-      docOp.patch.execute([
-        {
-          set: {
-            cover: {
-              _type: "image",
-              asset: { _type: "reference", _ref: assetId },
-              alt: title || "",
-            },
-          },
-        },
-      ]);
+      applyCover(assetId);
 
       setStage(null);
       setOpen(false);
@@ -218,52 +236,187 @@ export function BookCoverInput(props: ObjectInputProps) {
     } catch (e) {
       console.error(e);
       setStage(null);
-      // Silently remove the failed candidate from the list rather than
-      // surface a scary error — they can just pick another.
       setCandidates((prev) => prev.filter((x) => x.id !== c.id));
-      setError(
-        e instanceof Error
-          ? `That cover didn't work — try another.`
-          : "Failed to set cover",
-      );
+      setError("That cover didn't work — try another.");
     } finally {
       setImportingId(null);
     }
   };
 
-  // Show different button text depending on whether the book already has
-  // a cover (set via Lookup or manual upload).
-  const hasCover = Boolean(
-    (props.value as { asset?: { _ref?: string } } | undefined)?.asset?._ref,
-  );
-  const buttonText = open
+  const uploadCustomFile = async (file: File) => {
+    setImportingId("custom-upload");
+    setError(null);
+    setStage("Uploading to Sanity…");
+    try {
+      const assetId = await uploadAndVerify(
+        client,
+        file,
+        file.name || "cover.jpg",
+      );
+      setStage("Saving…");
+      applyCover(assetId);
+      setStage(null);
+    } catch (e) {
+      console.error(e);
+      setStage(null);
+      setError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setImportingId(null);
+    }
+  };
+
+  const clearCover = () => {
+    props.onChange(unset());
+  };
+
+  const pickerButtonText = open
     ? "Refresh covers"
-    : hasCover
+    : currentRef
       ? "Find more covers"
       : "Search for covers";
 
   return (
     <Stack space={3}>
-      <Flex justify="flex-end">
+      {/* Custom preview — bypasses Sanity's native image input entirely
+          to avoid the stuck-on-loading bug after programmatic uploads. */}
+      <Card
+        radius={3}
+        shadow={1}
+        style={{
+          overflow: "hidden",
+          background: "#fafafa",
+        }}
+      >
+        <Box
+          style={{
+            position: "relative",
+            width: "100%",
+            aspectRatio: "3 / 4",
+            maxHeight: 360,
+            overflow: "hidden",
+          }}
+        >
+          {previewUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              key={previewUrl}
+              src={previewUrl}
+              alt={value?.alt || title || ""}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                background: "#f0f0f0",
+              }}
+              loading="eager"
+            />
+          ) : (
+            <Flex
+              align="center"
+              justify="center"
+              style={{
+                width: "100%",
+                height: "100%",
+                background: "#f0f0f0",
+                color: "#999",
+              }}
+            >
+              <Stack space={2}>
+                <ImagesIcon style={{ fontSize: 32, opacity: 0.5 }} />
+                <Text size={1} muted>
+                  No cover yet
+                </Text>
+              </Stack>
+            </Flex>
+          )}
+
+          {importingId && stage && (
+            <Box
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "rgba(255, 255, 255, 0.92)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Stack space={3}>
+                <Spinner muted />
+                <Text size={1}>{stage}</Text>
+              </Stack>
+            </Box>
+          )}
+        </Box>
+      </Card>
+
+      {/* Action row */}
+      <Flex gap={2} justify="flex-end" wrap="wrap">
+        <Button
+          mode="ghost"
+          icon={UploadIcon}
+          text="Upload file"
+          fontSize={1}
+          padding={2}
+          disabled={Boolean(importingId)}
+          onClick={() => fileInputRef.current?.click()}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) uploadCustomFile(f);
+            e.target.value = "";
+          }}
+        />
+        {currentRef && (
+          <Button
+            mode="ghost"
+            tone="critical"
+            text="Remove"
+            fontSize={1}
+            padding={2}
+            disabled={Boolean(importingId)}
+            onClick={clearCover}
+          />
+        )}
         <Button
           mode="ghost"
           icon={open ? RefreshIcon : ImagesIcon}
-          text={buttonText}
+          text={pickerButtonText}
           fontSize={1}
           padding={2}
+          disabled={Boolean(importingId)}
           onClick={() => {
-            if (!open) {
-              setOpen(true);
-              findCovers();
-            } else {
-              findCovers();
-            }
+            setOpen(true);
+            findCovers();
           }}
         />
       </Flex>
 
+      {/* Alt text field — Sanity normally renders this via members; since we
+          replaced the default render, surface it ourselves. */}
+      <Stack space={2}>
+        <Text size={1} weight="medium">
+          Alt text
+        </Text>
+        <TextInput
+          value={value?.alt || ""}
+          placeholder="Describe the image for accessibility"
+          onChange={(e) => {
+            const next: ImageValue = { ...(value || {}), alt: e.currentTarget.value };
+            if (!next.asset) delete next.alt;
+            props.onChange(set(next));
+          }}
+        />
+      </Stack>
+
+      {/* Picker */}
       {open && (
-        <Card padding={3} radius={2} tone="primary" border>
+        <Card padding={3} radius={2} shadow={1}>
           <Stack space={3}>
             <Flex align="center" justify="space-between">
               <Text size={1} weight="medium">
@@ -285,15 +438,6 @@ export function BookCoverInput(props: ObjectInputProps) {
                 }}
               />
             </Flex>
-
-            {importingId && stage && (
-              <Card tone="primary" padding={2} radius={2}>
-                <Flex gap={2} align="center">
-                  <Spinner muted />
-                  <Text size={1}>{stage}</Text>
-                </Flex>
-              </Card>
-            )}
 
             {error && (
               <Card tone="critical" padding={2} radius={2}>
@@ -373,8 +517,6 @@ export function BookCoverInput(props: ObjectInputProps) {
           </Stack>
         </Card>
       )}
-
-      {props.renderDefault(props)}
     </Stack>
   );
 }
