@@ -12,7 +12,7 @@ const ALLOWED_HOSTS = new Set([
   "covers.openlibrary.org",
 ]);
 
-export async function GET(req: Request) {
+async function handle(req: Request, headOnly: boolean) {
   const url = new URL(req.url).searchParams.get("url");
   if (!url) {
     return NextResponse.json({ error: "missing url" }, { status: 400 });
@@ -32,28 +32,37 @@ export async function GET(req: Request) {
     );
   }
 
-  const res = await fetch(target.toString(), { cache: "no-store" });
+  const res = await fetch(target.toString(), {
+    method: headOnly ? "HEAD" : "GET",
+    cache: "no-store",
+  });
+
   if (!res.ok) {
-    return NextResponse.json(
-      { error: `upstream ${res.status}` },
-      { status: res.status },
-    );
+    return new Response(headOnly ? null : `upstream ${res.status}`, {
+      status: res.status,
+    });
   }
 
-  // Reject non-image upstream responses so we never upload an HTML error
-  // page (or anything weird) into Sanity as an image asset.
   const contentType = res.headers.get("content-type") || "";
   if (!contentType.startsWith("image/")) {
-    return NextResponse.json(
-      { error: `upstream returned non-image content (${contentType})` },
-      { status: 415 },
-    );
+    return new Response(headOnly ? null : "non-image content", {
+      status: 415,
+      headers: { "Content-Type": "text/plain" },
+    });
   }
 
-  return new Response(res.body, {
+  return new Response(headOnly ? null : res.body, {
     headers: {
       "Content-Type": contentType,
       "Cache-Control": "public, max-age=3600",
     },
   });
+}
+
+export async function GET(req: Request) {
+  return handle(req, false);
+}
+
+export async function HEAD(req: Request) {
+  return handle(req, true);
 }

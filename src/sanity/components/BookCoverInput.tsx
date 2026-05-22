@@ -154,10 +154,28 @@ export function BookCoverInput(props: ObjectInputProps) {
         new Map(found.map((c) => [c.thumbUrl, c])).values(),
       );
 
-      setCandidates(dedup);
-      if (dedup.length === 0)
+      // Pre-validate each candidate via HEAD through the proxy. Open Library's
+      // search API sometimes returns cover_i values whose actual cover images
+      // 400/404, so filter those out before showing to the user.
+      const validations = await Promise.allSettled(
+        dedup.map(async (c) => {
+          const r = await fetch(
+            `/api/cover-proxy?url=${encodeURIComponent(c.fullUrl)}`,
+            { method: "HEAD" },
+          );
+          return r.ok ? c : null;
+        }),
+      );
+      const validated = validations
+        .map((r) =>
+          r.status === "fulfilled" && r.value ? r.value : null,
+        )
+        .filter((c): c is Candidate => c !== null);
+
+      setCandidates(validated);
+      if (validated.length === 0)
         setError(
-          "No alternative covers found. Try editing the ISBN or title, or upload manually.",
+          "No working cover candidates found. Try editing the ISBN or title, or upload manually.",
         );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cover search failed");
@@ -200,9 +218,12 @@ export function BookCoverInput(props: ObjectInputProps) {
     } catch (e) {
       console.error(e);
       setStage(null);
+      // Silently remove the failed candidate from the list rather than
+      // surface a scary error — they can just pick another.
+      setCandidates((prev) => prev.filter((x) => x.id !== c.id));
       setError(
         e instanceof Error
-          ? `${e.message}. Try a different cover or upload manually.`
+          ? `That cover didn't work — try another.`
           : "Failed to set cover",
       );
     } finally {
