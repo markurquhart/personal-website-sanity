@@ -1,123 +1,91 @@
-// Shared cover-fetch + Sanity asset upload logic used by both the book
-// lookup (single-click metadata + cover) and the alternate cover picker.
+// Google Books cover helpers for the Studio book editor.
+//
+// Two responsibilities:
+//   1. Build the canonical high-res Google Books cover URL for a volume.
+//   2. Download those bytes (via the same-origin proxy, since Google's image
+//      CDN has no CORS headers) and upload them as a Sanity image asset.
 
 import type { SanityClient } from "@sanity/client";
 
-// Decode the blob with the browser's Image API to confirm it's a real image
-// before sending it to Sanity. Catches truncated downloads, HTML error
-// pages mislabeled as images, etc.
-async function validateImageBlob(blob: Blob): Promise<void> {
+// Build a Google Books content URL for a volume at a given zoom. Zoom 3 is a
+// large frontcover (~600×900px-ish, depending on the source scan); zoom 2 is
+// medium; zoom 1 is the small thumbnail. We strip the &edge=curl param that
+// Google's thumbnail URLs sometimes carry — it draws a fake page curl on top
+// of the cover, which we don't want.
+export function googleCoverUrl(volumeId: string, zoom: 1 | 2 | 3 = 3): string {
+  return `https://books.google.com/books/content?id=${encodeURIComponent(
+    volumeId,
+  )}&printsec=frontcover&img=1&zoom=${zoom}&source=gbs_api`;
+}
+
+// Decode the blob through the browser's <img> pipeline. Confirms the bytes
+// are a real image AND returns the natural dimensions so the caller can
+// distinguish a real cover from Google's "Image not available" placeholder
+// (the placeholder is 128×~180; a real zoom=3 cover is 400px+ wide).
+function decodeImage(
+  blob: Blob,
+): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
-      const ok = img.naturalWidth > 0 && img.naturalHeight > 0;
+      const { naturalWidth: w, naturalHeight: h } = img;
       URL.revokeObjectURL(url);
-      ok ? resolve() : reject(new Error("Image decoded to 0×0 — corrupt"));
+      if (w > 0 && h > 0) resolve({ width: w, height: h });
+      else reject(new Error("Cover decoded to 0×0 — file is corrupt"));
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error("Image failed to decode (not a valid image)"));
+      reject(new Error("Cover failed to decode (not a valid image)"));
     };
     img.src = url;
   });
 }
 
-// Fetch image bytes via the same-origin proxy. Validates content-type and
-// size; rejects HTML error pages and corrupt downloads.
-export async function fetchCoverFromUrl(
-  url: string,
-  timeoutMs = 10000,
+// Fetch image bytes through the same-origin proxy. Validates the response
+// shape so we don't pass HTML or partial data downstream.
+export async function fetchGoogleCover(
+  volumeId: string,
+  zoom: 1 | 2 | 3 = 3,
+  timeoutMs = 15000,
 ): Promise<Blob> {
-  const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(url)}`;
+  const upstream = googleCoverUrl(volumeId, zoom);
+  const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(upstream)}`;
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(proxyUrl, { signal: controller.signal });
-    if (!res.ok) throw new Error(`Cover fetch failed: ${res.status}`);
+    if (!res.ok) throw new Error(`Cover fetch failed (${res.status})`);
     const blob = await res.blob();
-    if (blob.size < 1000) throw new Error("Cover image looks empty");
-    if (!blob.type.startsWith("image/"))
-      throw new Error(`Got non-image response (${blob.type})`);
+    if (!blob.type.startsWith("image/")) {
+      throw new Error(`Unexpected response type (${blob.type || "unknown"})`);
+    }
+    const { width, height } = await decodeImage(blob);
+    // Google serves an "Image not available" placeholder (≈128×180px) for
+    // volumes with no real scan. A real zoom=3 cover is 400px+ wide, so we
+    // reject anything below that as the placeholder rather than uploading
+    // junk to Sanity.
+    if (width < 256 || height < 256) {
+      throw new Error("Google has no usable cover for this volume");
+    }
     return blob;
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-// Upload to Sanity, then VERIFY the asset URL actually serves valid image
-// bytes before returning the asset ID. Per Sanity's own troubleshooting:
-// uploads can return successfully but produce truncated/incomplete assets
-// that Studio then can't render (stuck on "Loading"). The fix is to verify,
-// and if the asset is broken, delete it and retry.
-//
-// Also HEAD-warms the common transformed URLs Studio uses in image previews
-// so Studio's first render after the patch hits a warm CDN cache.
-export async function uploadAndVerify(
+// Upload a verified blob to Sanity as an image asset and return the asset id.
+// Per Sanity's documented pattern: validate the blob client-side (we already
+// did above), then trust client.assets.upload's resolution.
+export async function uploadCoverBlob(
   client: SanityClient,
   blob: Blob,
   filename: string,
 ): Promise<string> {
-  await validateImageBlob(blob);
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const asset = await client.assets.upload("image", blob, { filename });
-    if (!asset?._id || !asset.url) {
-      throw new Error("Sanity returned no asset id/url");
-    }
-
-    // Brief wait for Sanity's CDN to start serving the asset
-    await new Promise((r) => setTimeout(r, 1500));
-
-    // Verify the asset URL serves valid image bytes
-    let verified = false;
-    try {
-      const verify = await fetch(asset.url, { cache: "no-store" });
-      if (verify.ok) {
-        const verifyBlob = await verify.blob();
-        const validSize = verifyBlob.size >= 1000;
-        const validType = verifyBlob.type.startsWith("image/");
-        // The verified blob should be roughly the same size as what we
-        // uploaded (allow generous tolerance — Sanity may strip metadata).
-        const sizeReasonable =
-          verifyBlob.size >= blob.size * 0.5 || verifyBlob.size >= 5000;
-        verified = validSize && validType && sizeReasonable;
-      }
-    } catch (e) {
-      console.warn(`Asset verification attempt ${attempt} failed:`, e);
-    }
-
-    if (verified) {
-      // Pre-warm common transformed URLs Studio uses for previews so its
-      // image component renders instantly when the patch lands.
-      await Promise.allSettled([
-        fetch(`${asset.url}?w=200&h=300&fit=crop`, {
-          method: "HEAD",
-          cache: "no-store",
-        }),
-        fetch(`${asset.url}?w=400&h=600&fit=crop`, {
-          method: "HEAD",
-          cache: "no-store",
-        }),
-      ]);
-      return asset._id;
-    }
-
-    // Verification failed — delete the broken asset and retry the upload
-    try {
-      await client.delete(asset._id);
-    } catch (e) {
-      console.warn("Couldn't delete broken asset:", e);
-    }
-    console.warn(
-      `Cover upload attempt ${attempt} produced a broken asset; retrying…`,
-    );
+  const asset = await client.assets.upload("image", blob, { filename });
+  if (!asset?._id) {
+    throw new Error("Sanity upload returned no asset id");
   }
-
-  throw new Error(
-    "Sanity didn't serve the uploaded cover after 3 attempts. The upload may have been truncated — try again.",
-  );
+  return asset._id;
 }
-
-// Back-compat alias for callers still importing the old name.
-export { uploadAndVerify as uploadAndWaitForReady };

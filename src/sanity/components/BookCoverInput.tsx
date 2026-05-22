@@ -1,522 +1,501 @@
 "use client";
 
-import { ImagesIcon, RefreshIcon, UploadIcon } from "@sanity/icons";
+// BookCoverInput
+//
+// Custom input for the book schema's `cover` field. Two jobs:
+//
+// 1. Render a reliable preview of the current cover. We intentionally
+//    bypass Sanity's default image-preview component (props.renderDefault)
+//    and render a plain `<img>` built via `urlFor()` against the asset
+//    reference. Studio's stock preview can hang on "Loading…" forever after
+//    a programmatic upload (a long-standing issue), so the plain element
+//    sidesteps that entirely.
+//
+// 2. Offer three ways to set the cover: a Google Books picker (when we know
+//    the title or ISBN), a native file upload, and a remove button. The
+//    picker is what makes "find a different cover than the one Google gave
+//    us during lookup" trivial.
+
+import {
+  CloseIcon,
+  ImagesIcon,
+  TrashIcon,
+  UploadIcon,
+} from "@sanity/icons";
 import {
   Box,
   Button,
   Card,
+  Dialog,
   Flex,
   Grid,
   Spinner,
   Stack,
   Text,
   TextInput,
+  useToast,
 } from "@sanity/ui";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   set,
   unset,
   useClient,
   useFormValue,
+  type ImageValue,
   type ObjectInputProps,
 } from "sanity";
 
-import { fetchCoverFromUrl, uploadAndVerify } from "./bookCoverHelpers";
+import { urlFor } from "../lib/image";
+import { fetchGoogleCover, uploadCoverBlob } from "./bookCoverHelpers";
 
-type Candidate = {
+const GOOGLE_BOOKS_API = "https://www.googleapis.com/books/v1/volumes";
+const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API;
+
+type CoverCandidate = {
   id: string;
-  label: string;
+  title: string;
+  authors: string[];
   thumbUrl: string;
-  fullUrl: string;
 };
 
-type ImageValue = {
-  asset?: { _ref?: string };
-  alt?: string;
-};
+export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
+  const client = useClient({ apiVersion: "2024-01-01" });
+  const toast = useToast();
+  const value = props.value;
+  const hasAsset = Boolean(value?.asset?._ref);
 
-// Build a CDN URL for a Sanity asset ref. Asset refs look like:
-//   image-{hash}-{width}x{height}-{format}
-// e.g. "image-abc123def456-800x1200-jpg"
-function sanityImageUrl(
-  ref: string | undefined,
-  projectId: string,
-  dataset: string,
-  query?: string,
-): string | null {
-  if (!ref) return null;
-  const m = ref.match(/^image-([a-f0-9]+)-(\d+x\d+)-([a-z]+)$/i);
-  if (!m) return null;
-  const [, hash, dims, format] = m;
-  const base = `https://cdn.sanity.io/images/${projectId}/${dataset}/${hash}-${dims}.${format}`;
-  return query ? `${base}?${query}` : base;
-}
-
-export function BookCoverInput(props: ObjectInputProps) {
-  const isbn = useFormValue(["isbn"]) as string | undefined;
   const title = useFormValue(["title"]) as string | undefined;
   const authors = useFormValue(["authors"]) as string[] | undefined;
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [importingId, setImportingId] = useState<string | null>(null);
-  const [stage, setStage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const isbn = useFormValue(["isbn"]) as string | undefined;
+  const alt = (value as ImageValue & { alt?: string } | undefined)?.alt || "";
+
+  const [uploading, setUploading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const client = useClient({ apiVersion: "2026-05-21" });
 
-  const config = client.config();
-  const projectId = config.projectId || "";
-  const dataset = config.dataset || "";
-
-  const value = props.value as ImageValue | undefined;
-  const currentRef = value?.asset?._ref;
-  const previewUrl = sanityImageUrl(currentRef, projectId, dataset, "w=480");
-
-  const findCovers = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setCandidates([]);
+  const previewUrl = useMemo(() => {
+    if (!value?.asset?._ref) return undefined;
     try {
-      const found: Candidate[] = [];
-
-      if (isbn) {
-        const olThumb = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-M.jpg?default=false`;
-        const olFull = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
-        try {
-          const r = await fetch(olThumb);
-          if (r.ok) {
-            const blob = await r.blob();
-            if (blob.size > 1000) {
-              found.push({
-                id: "ol-isbn",
-                label: "Open Library",
-                thumbUrl: olThumb,
-                fullUrl: olFull,
-              });
-            }
-          }
-        } catch {}
-      }
-
-      const olParams = new URLSearchParams();
-      if (isbn) {
-        olParams.set("isbn", isbn);
-      } else if (title) {
-        olParams.set("title", title);
-        const a = (authors || [])[0];
-        if (a) olParams.set("author", a);
-      }
-      olParams.set("limit", "15");
-
-      try {
-        const url = `https://openlibrary.org/search.json?${olParams.toString()}`;
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
-          for (const doc of data.docs || []) {
-            if (!doc.cover_i) continue;
-            const thumb = `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg?default=false`;
-            const full = `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg?default=false`;
-            const label =
-              (doc.publisher && doc.publisher[0]) ||
-              (doc.first_publish_year
-                ? String(doc.first_publish_year)
-                : "Open Library");
-            found.push({
-              id: `ol-id-${doc.cover_i}`,
-              label,
-              thumbUrl: thumb,
-              fullUrl: full,
-            });
-          }
-        }
-      } catch (e) {
-        console.warn("Open Library search failed:", e);
-      }
-
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API;
-      const keyParam = apiKey ? `&key=${apiKey}` : "";
-      let gbQuery: string | null = null;
-      if (isbn) {
-        gbQuery = `isbn:${isbn}`;
-      } else if (title) {
-        const a = (authors || [])[0] || "";
-        gbQuery = `intitle:${title}${a ? `+inauthor:${a}` : ""}`;
-      }
-      if (gbQuery) {
-        try {
-          const gbUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(gbQuery)}&maxResults=10${keyParam}`;
-          const res = await fetch(gbUrl);
-          if (res.ok) {
-            const data = await res.json();
-            for (const item of data.items || []) {
-              const img = item.volumeInfo?.imageLinks?.thumbnail;
-              if (!img) continue;
-              const thumb = img.replace(/^http:/, "https:");
-              const full = thumb
-                .replace(/&edge=curl/, "")
-                .replace(/&zoom=\d/, "&zoom=3");
-              found.push({
-                id: `gb-${item.id}`,
-                label:
-                  item.volumeInfo?.publisher ||
-                  item.volumeInfo?.publishedDate?.slice(0, 4) ||
-                  "Google Books",
-                thumbUrl: thumb,
-                fullUrl: full,
-              });
-            }
-          }
-        } catch (e) {
-          console.warn("Google Books search failed:", e);
-        }
-      }
-
-      const dedup = Array.from(
-        new Map(found.map((c) => [c.thumbUrl, c])).values(),
-      );
-
-      // HEAD-validate each candidate so broken ones don't show up
-      const validations = await Promise.allSettled(
-        dedup.map(async (c) => {
-          const r = await fetch(
-            `/api/cover-proxy?url=${encodeURIComponent(c.fullUrl)}`,
-            { method: "HEAD" },
-          );
-          return r.ok ? c : null;
-        }),
-      );
-      const validated = validations
-        .map((r) => (r.status === "fulfilled" && r.value ? r.value : null))
-        .filter((c): c is Candidate => c !== null);
-
-      setCandidates(validated);
-      if (validated.length === 0)
-        setError(
-          "No working cover candidates found. Try editing the ISBN or title, or upload manually.",
-        );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Cover search failed");
-    } finally {
-      setLoading(false);
+      return urlFor(value).width(480).fit("max").url();
+    } catch {
+      return undefined;
     }
-  }, [isbn, title, authors]);
+  }, [value]);
 
-  const applyCover = useCallback(
-    (assetId: string) => {
-      props.onChange(
-        set({
-          _type: "image",
-          asset: { _type: "reference", _ref: assetId },
-          alt: title || "",
-        }),
-      );
+  const setCoverAsset = useCallback(
+    (assetId: string, altText?: string) => {
+      const next: ImageValue & { alt?: string } = {
+        ...(value || {}),
+        _type: "image",
+        asset: { _type: "reference", _ref: assetId },
+      };
+      if (altText) next.alt = altText;
+      props.onChange(set(next));
     },
-    [props, title],
+    [props, value],
   );
 
-  const useCandidate = async (c: Candidate) => {
-    setImportingId(c.id);
-    setError(null);
-    setStage(null);
-    try {
-      setStage("Downloading cover…");
-      const blob = await fetchCoverFromUrl(c.fullUrl);
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      setUploading(true);
+      try {
+        const assetId = await uploadCoverBlob(client, file, file.name);
+        setCoverAsset(assetId, title);
+        toast.push({ status: "success", title: "Cover uploaded" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Upload failed";
+        toast.push({ status: "error", title: "Couldn't upload", description: msg });
+      } finally {
+        setUploading(false);
+      }
+    },
+    [client, setCoverAsset, title, toast],
+  );
 
-      setStage("Uploading to Sanity…");
-      const assetId = await uploadAndVerify(client, blob, `cover-${c.id}.jpg`);
-
-      setStage("Saving…");
-      applyCover(assetId);
-
-      setStage(null);
-      setOpen(false);
-      setCandidates([]);
-    } catch (e) {
-      console.error(e);
-      setStage(null);
-      setCandidates((prev) => prev.filter((x) => x.id !== c.id));
-      setError("That cover didn't work — try another.");
-    } finally {
-      setImportingId(null);
-    }
+  const handleAltChange = (next: string) => {
+    if (!value) return;
+    const updated: ImageValue & { alt?: string } = {
+      ...value,
+      alt: next || undefined,
+    };
+    props.onChange(set(updated));
   };
 
-  const uploadCustomFile = async (file: File) => {
-    setImportingId("custom-upload");
-    setError(null);
-    setStage("Uploading to Sanity…");
-    try {
-      const assetId = await uploadAndVerify(
-        client,
-        file,
-        file.name || "cover.jpg",
-      );
-      setStage("Saving…");
-      applyCover(assetId);
-      setStage(null);
-    } catch (e) {
-      console.error(e);
-      setStage(null);
-      setError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setImportingId(null);
-    }
-  };
-
-  const clearCover = () => {
+  const handleRemove = () => {
     props.onChange(unset());
   };
 
-  const pickerButtonText = open
-    ? "Refresh covers"
-    : currentRef
-      ? "Find more covers"
-      : "Search for covers";
-
   return (
-    <Stack space={3}>
-      {/* Custom preview — bypasses Sanity's native image input entirely
-          to avoid the stuck-on-loading bug after programmatic uploads. */}
-      <Card
-        radius={3}
-        shadow={1}
-        style={{
-          overflow: "hidden",
-          background: "#fafafa",
-        }}
-      >
-        <Box
-          style={{
-            position: "relative",
-            width: "100%",
-            aspectRatio: "3 / 4",
-            maxHeight: 360,
-            overflow: "hidden",
-          }}
-        >
-          {previewUrl ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              key={previewUrl}
-              src={previewUrl}
-              alt={value?.alt || title || ""}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "contain",
-                background: "#f0f0f0",
-              }}
-              loading="eager"
-            />
-          ) : (
-            <Flex
-              align="center"
-              justify="center"
-              style={{
-                width: "100%",
-                height: "100%",
-                background: "#f0f0f0",
-                color: "#999",
-              }}
-            >
+    <>
+      <Card padding={3} radius={3} shadow={1} tone="default">
+        <Stack space={4}>
+          <Flex gap={4} align="flex-start">
+            <CoverPreview previewUrl={previewUrl} alt={alt || title} />
+
+            <Stack space={3} flex={1}>
               <Stack space={2}>
-                <ImagesIcon style={{ fontSize: 32, opacity: 0.5 }} />
+                <Text weight="semibold" size={2}>
+                  Cover image
+                </Text>
                 <Text size={1} muted>
-                  No cover yet
+                  {hasAsset
+                    ? "This image is uploaded to Sanity and served from your project."
+                    : "No cover yet. Pick one from Google Books or upload a file."}
                 </Text>
               </Stack>
-            </Flex>
-          )}
 
-          {importingId && stage && (
-            <Box
-              style={{
-                position: "absolute",
-                inset: 0,
-                background: "rgba(255, 255, 255, 0.92)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Stack space={3}>
-                <Spinner muted />
-                <Text size={1}>{stage}</Text>
-              </Stack>
-            </Box>
-          )}
-        </Box>
-      </Card>
+              <Flex gap={2} wrap="wrap">
+                <Button
+                  text={hasAsset ? "Replace from Google" : "Find on Google"}
+                  icon={ImagesIcon}
+                  tone="primary"
+                  mode="default"
+                  onClick={() => setPickerOpen(true)}
+                  disabled={uploading}
+                />
+                <Button
+                  text="Upload file"
+                  icon={UploadIcon}
+                  mode="ghost"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                />
+                {hasAsset ? (
+                  <Button
+                    text="Remove"
+                    icon={TrashIcon}
+                    mode="bleed"
+                    tone="critical"
+                    onClick={handleRemove}
+                    disabled={uploading}
+                  />
+                ) : null}
+                {uploading ? (
+                  <Flex align="center" gap={2}>
+                    <Spinner muted />
+                    <Text muted size={1}>
+                      Uploading…
+                    </Text>
+                  </Flex>
+                ) : null}
+              </Flex>
 
-      {/* Action row */}
-      <Flex gap={2} justify="flex-end" wrap="wrap">
-        <Button
-          mode="ghost"
-          icon={UploadIcon}
-          text="Upload file"
-          fontSize={1}
-          padding={2}
-          disabled={Boolean(importingId)}
-          onClick={() => fileInputRef.current?.click()}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: "none" }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) uploadCustomFile(f);
-            e.target.value = "";
-          }}
-        />
-        {currentRef && (
-          <Button
-            mode="ghost"
-            tone="critical"
-            text="Remove"
-            fontSize={1}
-            padding={2}
-            disabled={Boolean(importingId)}
-            onClick={clearCover}
-          />
-        )}
-        <Button
-          mode="ghost"
-          icon={open ? RefreshIcon : ImagesIcon}
-          text={pickerButtonText}
-          fontSize={1}
-          padding={2}
-          disabled={Boolean(importingId)}
-          onClick={() => {
-            setOpen(true);
-            findCovers();
-          }}
-        />
-      </Flex>
-
-      {/* Alt text field — Sanity normally renders this via members; since we
-          replaced the default render, surface it ourselves. */}
-      <Stack space={2}>
-        <Text size={1} weight="medium">
-          Alt text
-        </Text>
-        <TextInput
-          value={value?.alt || ""}
-          placeholder="Describe the image for accessibility"
-          onChange={(e) => {
-            const next: ImageValue = { ...(value || {}), alt: e.currentTarget.value };
-            if (!next.asset) delete next.alt;
-            props.onChange(set(next));
-          }}
-        />
-      </Stack>
-
-      {/* Picker */}
-      {open && (
-        <Card padding={3} radius={2} shadow={1}>
-          <Stack space={3}>
-            <Flex align="center" justify="space-between">
-              <Text size={1} weight="medium">
-                {loading
-                  ? "Searching…"
-                  : candidates.length > 0
-                    ? `Pick a cover (${candidates.length} found)`
-                    : "Cover candidates"}
-              </Text>
-              <Button
-                mode="bleed"
-                fontSize={1}
-                padding={1}
-                text="Close"
-                onClick={() => {
-                  setOpen(false);
-                  setCandidates([]);
-                  setError(null);
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.currentTarget.files?.[0];
+                  if (f) handleFileUpload(f);
+                  e.currentTarget.value = "";
                 }}
               />
-            </Flex>
+            </Stack>
+          </Flex>
 
-            {error && (
-              <Card tone="critical" padding={2} radius={2}>
-                <Text size={1}>{error}</Text>
-              </Card>
-            )}
+          {hasAsset ? (
+            <Stack space={2}>
+              <Text size={1} weight="medium">
+                Alt text
+              </Text>
+              <TextInput
+                value={alt}
+                onChange={(e) => handleAltChange(e.currentTarget.value)}
+                placeholder={title || "Describe the cover for accessibility"}
+                fontSize={1}
+                padding={3}
+              />
+            </Stack>
+          ) : null}
+        </Stack>
+      </Card>
 
-            {loading && (
-              <Flex justify="center" padding={3}>
-                <Spinner />
-              </Flex>
-            )}
+      {pickerOpen ? (
+        <CoverPickerDialog
+          title={title}
+          authors={authors}
+          isbn={isbn}
+          onClose={() => setPickerOpen(false)}
+          onPick={async (candidate) => {
+            setPickerOpen(false);
+            setUploading(true);
+            try {
+              const blob = await fetchGoogleCover(candidate.id, 3);
+              const safeName =
+                (title || candidate.title || "cover")
+                  .replace(/[^a-z0-9]+/gi, "-")
+                  .slice(0, 60) || "cover";
+              const assetId = await uploadCoverBlob(
+                client,
+                blob,
+                `${safeName}.jpg`,
+              );
+              setCoverAsset(assetId, title || candidate.title);
+              toast.push({ status: "success", title: "Cover updated" });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Upload failed";
+              toast.push({
+                status: "error",
+                title: "Couldn't update cover",
+                description: msg,
+              });
+            } finally {
+              setUploading(false);
+            }
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
 
-            {candidates.length > 0 && (
-              <Grid columns={[3, 4, 5]} gap={2}>
-                {candidates.map((c) => {
-                  const isImporting = importingId === c.id;
-                  return (
-                    <Card
-                      key={c.id}
-                      padding={2}
-                      radius={2}
-                      shadow={1}
-                      onClick={() => !importingId && useCandidate(c)}
-                      style={{
-                        cursor: importingId ? "default" : "pointer",
-                        opacity: importingId && !isImporting ? 0.4 : 1,
-                      }}
-                    >
-                      <Stack space={2}>
-                        <Box
-                          style={{
-                            position: "relative",
-                            width: "100%",
-                            aspectRatio: "2 / 3",
-                            background: "#eee",
-                            borderRadius: 3,
-                            overflow: "hidden",
-                          }}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={c.thumbUrl}
-                            alt=""
-                            style={{
-                              position: "absolute",
-                              inset: 0,
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                          {isImporting && (
-                            <Box
-                              style={{
-                                position: "absolute",
-                                inset: 0,
-                                background: "rgba(255,255,255,0.7)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <Spinner />
-                            </Box>
-                          )}
-                        </Box>
-                        <Text size={0} muted align="center">
-                          {c.label}
-                        </Text>
-                      </Stack>
-                    </Card>
-                  );
-                })}
-              </Grid>
-            )}
-          </Stack>
-        </Card>
+function CoverPreview(props: { previewUrl?: string; alt?: string }) {
+  const { previewUrl, alt } = props;
+  return (
+    <div
+      style={{
+        width: 140,
+        aspectRatio: "2 / 3",
+        flex: "0 0 auto",
+        background: "var(--card-muted-bg-color, rgba(0,0,0,0.04))",
+        borderRadius: 6,
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        border: "1px solid var(--card-border-color, rgba(0,0,0,0.08))",
+      }}
+    >
+      {previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={previewUrl}
+          alt={alt || ""}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      ) : (
+        <Text muted size={4}>
+          <ImagesIcon />
+        </Text>
       )}
-    </Stack>
+    </div>
+  );
+}
+
+function CoverPickerDialog(props: {
+  title?: string;
+  authors?: string[];
+  isbn?: string;
+  onClose: () => void;
+  onPick: (candidate: CoverCandidate) => void;
+}) {
+  const { title, authors, isbn, onClose, onPick } = props;
+  const [query, setQuery] = useState(() => {
+    if (isbn) return `isbn:${isbn}`;
+    if (title && authors?.length)
+      return `intitle:${title} inauthor:${authors[0]}`;
+    if (title) return `intitle:${title}`;
+    return "";
+  });
+  const [loading, setLoading] = useState(false);
+  const [candidates, setCandidates] = useState<CoverCandidate[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const runSearch = useCallback(async (q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const url = new URL(GOOGLE_BOOKS_API);
+      url.searchParams.set("q", trimmed);
+      url.searchParams.set("maxResults", "12");
+      url.searchParams.set("printType", "books");
+      if (API_KEY) url.searchParams.set("key", API_KEY);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error(`Google Books ${res.status}`);
+      const data = (await res.json()) as {
+        items?: {
+          id: string;
+          volumeInfo?: {
+            title?: string;
+            authors?: string[];
+            imageLinks?: { thumbnail?: string; smallThumbnail?: string };
+          };
+        }[];
+      };
+      const items = (data.items || [])
+        .map<CoverCandidate | null>((it) => {
+          const thumb =
+            it.volumeInfo?.imageLinks?.thumbnail ||
+            it.volumeInfo?.imageLinks?.smallThumbnail;
+          if (!thumb) return null;
+          return {
+            id: it.id,
+            title: it.volumeInfo?.title || "Untitled",
+            authors: it.volumeInfo?.authors || [],
+            thumbUrl: thumb
+              .replace(/^http:\/\//, "https://")
+              .replace(/&edge=curl/, "")
+              .replace(/zoom=\d+/, "zoom=2"),
+          };
+        })
+        .filter((c): c is CoverCandidate => Boolean(c));
+      setCandidates(items);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Search failed";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Auto-run the initial search when the dialog opens with a seeded query.
+  // The state updates here are intentional — we want the dialog to land
+  // with results pre-loaded based on what we already know about the book.
+  /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (query.trim()) runSearch(query);
+  }, []);
+  /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
+
+  return (
+    <Dialog
+      id="book-cover-picker"
+      header="Find a cover"
+      onClose={onClose}
+      width={2}
+      footer={
+        <Flex padding={3} justify="flex-end">
+          <Button text="Close" mode="ghost" icon={CloseIcon} onClick={onClose} />
+        </Flex>
+      }
+    >
+      <Box padding={4}>
+        <Stack space={4}>
+          <Flex gap={2}>
+            <Box flex={1}>
+              <TextInput
+                value={query}
+                onChange={(e) => setQuery(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    runSearch(query);
+                  }
+                }}
+                placeholder="Search Google Books for a cover…"
+                fontSize={2}
+                padding={3}
+              />
+            </Box>
+            <Button
+              text="Search"
+              tone="primary"
+              onClick={() => runSearch(query)}
+              disabled={!query.trim() || loading}
+              padding={3}
+            />
+          </Flex>
+
+          {loading ? (
+            <Flex align="center" justify="center" gap={3} padding={5}>
+              <Spinner muted />
+              <Text muted size={1}>
+                Searching…
+              </Text>
+            </Flex>
+          ) : error ? (
+            <Card padding={3} radius={2} tone="critical">
+              <Text size={1}>{error}</Text>
+            </Card>
+          ) : candidates.length === 0 ? (
+            <Card padding={4} radius={2} tone="transparent">
+              <Text muted size={1}>
+                {query.trim()
+                  ? "No covers found. Try a different query."
+                  : "Type a title, author, or ISBN to search."}
+              </Text>
+            </Card>
+          ) : (
+            <Grid columns={[3, 4, 5]} gap={3}>
+              {candidates.map((c) => (
+                <CandidateTile key={c.id} candidate={c} onPick={onPick} />
+              ))}
+            </Grid>
+          )}
+        </Stack>
+      </Box>
+    </Dialog>
+  );
+}
+
+function CandidateTile(props: {
+  candidate: CoverCandidate;
+  onPick: (c: CoverCandidate) => void;
+}) {
+  const { candidate, onPick } = props;
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(candidate)}
+      style={{
+        appearance: "none",
+        background: "transparent",
+        border: "1px solid var(--card-border-color, rgba(0,0,0,0.08))",
+        borderRadius: 6,
+        padding: 6,
+        cursor: "pointer",
+        textAlign: "left",
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+      }}
+      title={`${candidate.title}${candidate.authors.length ? " — " + candidate.authors.join(", ") : ""}`}
+    >
+      <div
+        style={{
+          width: "100%",
+          aspectRatio: "2 / 3",
+          background: "var(--card-muted-bg-color, rgba(0,0,0,0.04))",
+          borderRadius: 4,
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={candidate.thumbUrl}
+          alt=""
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      </div>
+      <div
+        style={{
+          fontSize: 11,
+          color: "var(--card-muted-fg-color)",
+          lineHeight: 1.3,
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        }}
+      >
+        {candidate.title}
+      </div>
+    </button>
   );
 }

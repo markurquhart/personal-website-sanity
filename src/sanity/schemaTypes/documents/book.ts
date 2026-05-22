@@ -63,8 +63,8 @@ export const book = defineType({
   type: "document",
   icon: BookIcon,
   groups: [
-    { name: "details", title: "Details", default: true },
-    { name: "status", title: "Status & Dates" },
+    { name: "details", title: "About", default: true },
+    { name: "status", title: "Reading" },
     { name: "review", title: "Review" },
     { name: "history", title: "History" },
   ],

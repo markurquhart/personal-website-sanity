@@ -1,6 +1,9 @@
-// Whitelisted image proxy. Lets the Sanity Studio book editor fetch public
-// book covers without browser CORS issues. No secrets, just bypassing CORS
-// for image hosts we already display elsewhere on the site.
+// Same-origin proxy for Google Books cover images. The Studio needs to
+// fetch() these bytes to upload them as Sanity assets — Google's image CDN
+// doesn't send CORS headers, so the browser blocks a direct fetch (an
+// `<img src=…>` would render fine but we can't read the bytes from it).
+//
+// Whitelisted to Google Books hosts only.
 
 import { NextResponse } from "next/server";
 
@@ -9,7 +12,6 @@ export const runtime = "edge";
 const ALLOWED_HOSTS = new Set([
   "books.google.com",
   "books.googleusercontent.com",
-  "covers.openlibrary.org",
 ]);
 
 async function handle(req: Request, headOnly: boolean) {
@@ -45,7 +47,7 @@ async function handle(req: Request, headOnly: boolean) {
 
   const contentType = res.headers.get("content-type") || "";
   if (!contentType.startsWith("image/")) {
-    return new Response(headOnly ? null : "non-image content", {
+    return new Response(headOnly ? null : "non-image upstream", {
       status: 415,
       headers: { "Content-Type": "text/plain" },
     });
