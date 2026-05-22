@@ -23,8 +23,8 @@ async function validateImageBlob(blob: Blob): Promise<void> {
   });
 }
 
-// Fetch image bytes for a URL through our same-origin proxy (which handles
-// CORS for Google Books image hosts). Times out after timeoutMs.
+// Fetch image bytes via the same-origin proxy. Validates content-type and
+// size; rejects HTML error pages and corrupt downloads.
 export async function fetchCoverFromUrl(
   url: string,
   timeoutMs = 10000,
@@ -45,41 +45,79 @@ export async function fetchCoverFromUrl(
   }
 }
 
-// Upload a blob to Sanity and return only when the asset is ready to be
-// referenced safely:
-//   1) Sanity finished processing (metadata.lqip exists)
-//   2) Common preview URLs are pre-warmed on their CDN so Studio doesn't
-//      hit a cold cache on first render after the patch
-// Returns the Sanity asset _id.
-export async function uploadAndWaitForReady(
+// Upload to Sanity, then VERIFY the asset URL actually serves valid image
+// bytes before returning the asset ID. Per Sanity's own troubleshooting:
+// uploads can return successfully but produce truncated/incomplete assets
+// that Studio then can't render (stuck on "Loading"). The fix is to verify,
+// and if the asset is broken, delete it and retry.
+//
+// Also HEAD-warms the common transformed URLs Studio uses in image previews
+// so Studio's first render after the patch hits a warm CDN cache.
+export async function uploadAndVerify(
   client: SanityClient,
   blob: Blob,
   filename: string,
 ): Promise<string> {
   await validateImageBlob(blob);
-  const asset = await client.assets.upload("image", blob, { filename });
 
-  for (let i = 0; i < 20; i++) {
-    const fresh = await client.fetch<{
-      url?: string;
-      metadata?: { lqip?: string };
-    } | null>(`*[_id == $id][0]{ url, metadata }`, { id: asset._id });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const asset = await client.assets.upload("image", blob, { filename });
+    if (!asset?._id || !asset.url) {
+      throw new Error("Sanity returned no asset id/url");
+    }
 
-    if (fresh?.url && fresh?.metadata?.lqip) {
+    // Brief wait for Sanity's CDN to start serving the asset
+    await new Promise((r) => setTimeout(r, 1500));
+
+    // Verify the asset URL serves valid image bytes
+    let verified = false;
+    try {
+      const verify = await fetch(asset.url, { cache: "no-store" });
+      if (verify.ok) {
+        const verifyBlob = await verify.blob();
+        const validSize = verifyBlob.size >= 1000;
+        const validType = verifyBlob.type.startsWith("image/");
+        // The verified blob should be roughly the same size as what we
+        // uploaded (allow generous tolerance — Sanity may strip metadata).
+        const sizeReasonable =
+          verifyBlob.size >= blob.size * 0.5 || verifyBlob.size >= 5000;
+        verified = validSize && validType && sizeReasonable;
+      }
+    } catch (e) {
+      console.warn(`Asset verification attempt ${attempt} failed:`, e);
+    }
+
+    if (verified) {
+      // Pre-warm common transformed URLs Studio uses for previews so its
+      // image component renders instantly when the patch lands.
       await Promise.allSettled([
-        fetch(fresh.url, { method: "HEAD", cache: "no-store" }),
-        fetch(`${fresh.url}?w=200&h=300&fit=crop`, {
+        fetch(`${asset.url}?w=200&h=300&fit=crop`, {
           method: "HEAD",
           cache: "no-store",
         }),
-        fetch(`${fresh.url}?w=400&h=600&fit=crop`, {
+        fetch(`${asset.url}?w=400&h=600&fit=crop`, {
           method: "HEAD",
           cache: "no-store",
         }),
       ]);
       return asset._id;
     }
-    await new Promise((r) => setTimeout(r, 500));
+
+    // Verification failed — delete the broken asset and retry the upload
+    try {
+      await client.delete(asset._id);
+    } catch (e) {
+      console.warn("Couldn't delete broken asset:", e);
+    }
+    console.warn(
+      `Cover upload attempt ${attempt} produced a broken asset; retrying…`,
+    );
   }
-  throw new Error("Sanity took too long to process the image");
+
+  throw new Error(
+    "Sanity didn't serve the uploaded cover after 3 attempts. The upload may have been truncated — try again.",
+  );
 }
+
+// Back-compat alias for callers still importing the old name.
+export { uploadAndVerify as uploadAndWaitForReady };
