@@ -267,13 +267,31 @@ export function BookLookupInput(props: StringInputProps) {
       if (book.subtitle) setFields.subtitle = book.subtitle;
       if (book.authors.length) setFields.authors = book.authors;
       if (book.categories.length) {
-        // Google categories look like "Computers / Programming / Software".
-        // Flatten on " / " and dedupe so the genre array stays readable.
+        // Google categories look like "Computers / Programming / Software"
+        // or "Fiction / Fantasy / Epic". Flatten on " / " and dedupe.
         const leaf = book.categories
           .flatMap((c) => c.split(" / "))
           .map((c) => c.trim())
           .filter(Boolean);
-        if (leaf.length) setFields.genres = Array.from(new Set(leaf));
+
+        // Detect Fiction vs Non-Fiction from the flattened tokens so it
+        // can populate the `kind` field. "Juvenile Fiction" counts as
+        // Fiction; "Biography & Autobiography" without an explicit
+        // marker is left for the editor to decide.
+        const lowered = leaf.map((s) => s.toLowerCase());
+        const isNonFiction = lowered.some((s) => /non[\s-]?fiction/.test(s));
+        const isFiction =
+          !isNonFiction && lowered.some((s) => /\bfiction\b/.test(s));
+        if (isNonFiction) setFields.kind = "non-fiction";
+        else if (isFiction) setFields.kind = "fiction";
+
+        // Strip Fiction / Non-Fiction tokens from the genre list now
+        // that they live on the dedicated `kind` field.
+        const filtered = leaf.filter((g) => {
+          const l = g.toLowerCase();
+          return l !== "fiction" && !/non[\s-]?fiction/.test(l);
+        });
+        if (filtered.length) setFields.genres = Array.from(new Set(filtered));
       }
       if (coverAssetId) {
         setFields.cover = {

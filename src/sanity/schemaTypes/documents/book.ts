@@ -11,39 +11,44 @@ export const BOOK_STATUSES = [
   { title: "Paused", value: "paused" },
 ] as const;
 
+// Fiction vs. Non-Fiction lives on its own `kind` field — every book is
+// one or the other. Genres are sub-categories below that distinction.
+export const BOOK_KINDS = [
+  { title: "Fiction", value: "fiction" },
+  { title: "Non-Fiction", value: "non-fiction" },
+] as const;
+
 export const GENRES = [
-  "Fiction",
-  "Non-Fiction",
-  "Biography",
-  "Memoir",
-  "History",
-  "Philosophy",
-  "Science",
-  "Technology",
-  "Business",
-  "Self-Help",
-  "Psychology",
-  "Sociology",
-  "Politics",
-  "Economics",
-  "Health",
-  "Travel",
-  "Cooking",
   "Art",
-  "Poetry",
-  "Drama",
-  "Fantasy",
-  "Sci-Fi",
-  "Mystery",
-  "Thriller",
-  "Horror",
-  "Romance",
-  "Young Adult",
+  "Biography",
+  "Business",
   "Children's",
-  "Religion",
-  "Spirituality",
+  "Cooking",
+  "Drama",
+  "Economics",
   "Education",
+  "Fantasy",
+  "Health",
+  "History",
+  "Horror",
+  "Memoir",
+  "Mystery",
+  "Philosophy",
+  "Poetry",
+  "Politics",
+  "Psychology",
+  "Religion",
+  "Romance",
+  "Sci-Fi",
+  "Science",
+  "Self-Help",
+  "Sociology",
+  "Spirituality",
   "Sports",
+  "Technology",
+  "Thriller",
+  "Travel",
+  "Young Adult",
 ];
 
 const EVENT_TYPES = [
@@ -65,7 +70,13 @@ export const book = defineType({
   groups: [
     { name: "details", title: "About", default: true },
     { name: "status", title: "Reading" },
-    { name: "review", title: "Review" },
+    // Hidden until a book is finished — no point asking for a rating /
+    // review before the editor has actually read it.
+    {
+      name: "review",
+      title: "Review",
+      hidden: ({ document }) => document?.status !== "completed",
+    },
     { name: "history", title: "History" },
   ],
   fields: [
@@ -134,8 +145,19 @@ export const book = defineType({
       validation: (rule) => rule.positive().integer(),
     }),
     defineField({
+      name: "kind",
+      title: "Fiction or Non-Fiction",
+      type: "string",
+      group: "details",
+      options: {
+        list: BOOK_KINDS.map((k) => ({ title: k.title, value: k.value })),
+        layout: "radio",
+      },
+    }),
+    defineField({
       name: "genres",
       title: "Genres",
+      description: "Sub-categories. Fiction vs Non-Fiction is set above.",
       type: "array",
       group: "details",
       of: [defineArrayMember({ type: "string" })],

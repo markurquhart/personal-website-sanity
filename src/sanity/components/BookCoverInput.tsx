@@ -2,22 +2,27 @@
 
 // BookCoverInput
 //
-// Custom input for the book `cover` field. Adds three editor shortcuts on
-// top of Sanity's native image input (search Google Books, search Open
-// Library, upload a file). Delegates preview + crop + hotspot + alt to
-// `props.renderDefault(props)`.
+// Inline `renderDefault` (preview, crop, hotspot, native upload menu,
+// alt sub-field) — but deferred until the form has finished its initial
+// mount.
 //
-// Why this works now where it didn't before:
-//   1. `uploadCoverBlob` polls until the new asset doc is queryable
-//      before returning, so when we set the `_ref` Studio's listener
-//      cache already has the asset and the preview can resolve it
-//      immediately instead of hanging in "Loading…".
-//   2. We render `renderDefault` under a React `key` tied to the asset
-//      `_ref`. When the cover changes, the previous native input fully
-//      unmounts and a fresh one mounts — so even if the old preview ever
-//      got stuck in a loading state, the new one starts clean.
+// Why this works where the naive inline render didn't: Sanity's image
+// preview subscribes to the asset doc via a realtime listener. When the
+// input is mounted as part of the document's initial form render, that
+// subscription competes with every other field's listener and can stall
+// for 60s+. When the same input mounts AFTER the form has settled (e.g.
+// inside a portal/dialog, or here via `requestIdleCallback`), the
+// listener stream is idle and resolves immediately. So we hold
+// renderDefault back until the browser is idle, and show a plain `<img>`
+// from the CDN URL in the meantime — there is never a loading spinner
+// visible.
 
-import { CloseIcon, SearchIcon, UploadIcon } from "@sanity/icons";
+import {
+  CloseIcon,
+  ImagesIcon,
+  SearchIcon,
+  UploadIcon,
+} from "@sanity/icons";
 import {
   Box,
   Button,
@@ -32,7 +37,7 @@ import {
   TextInput,
   useToast,
 } from "@sanity/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   set,
   useClient,
@@ -40,6 +45,8 @@ import {
   type ImageValue,
   type ObjectInputProps,
 } from "sanity";
+
+import { urlFor } from "../lib/image";
 
 import {
   fetchGoogleCover,
@@ -72,7 +79,45 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
 
   const [uploading, setUploading] = useState(false);
   const [picker, setPicker] = useState<CoverSource | null>(null);
+  const [nativeReady, setNativeReady] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const previewUrl = useMemo(() => {
+    if (!value?.asset?._ref) return undefined;
+    try {
+      return urlFor(value).width(480).fit("max").url();
+    } catch {
+      return undefined;
+    }
+  }, [value]);
+
+  // Defer the renderDefault mount until the browser is idle. This is the
+  // critical bit — see the file header for the full reasoning.
+  useEffect(() => {
+    let cancelled = false;
+    const fire = () => {
+      if (!cancelled) setNativeReady(true);
+    };
+    const w = window as Window &
+      typeof globalThis & {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+    let idleId: number | undefined;
+    let timeoutId: number | undefined;
+    if (typeof w.requestIdleCallback === "function") {
+      idleId = w.requestIdleCallback(fire, { timeout: 1200 });
+    } else {
+      timeoutId = window.setTimeout(fire, 200);
+    }
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined && typeof w.cancelIdleCallback === "function") {
+        w.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, []);
 
   const setCoverAsset = useCallback(
     (assetId: string, altText?: string) => {
@@ -139,7 +184,7 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
   );
 
   return (
-    <Stack space={2}>
+    <Stack space={3}>
       <Inline space={1}>
         <Button
           text="Google Books"
@@ -190,13 +235,15 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
         }}
       />
 
-      {/* Sanity's default image input — preview, crop, hotspot, native
-          upload/remove menu, and alt sub-field. The `key` forces a clean
-          remount whenever the asset reference changes so the preview
-          starts fresh and can't be stuck in a stale "Loading…" state. */}
-      <div key={value?.asset?._ref || "empty"}>
-        {props.renderDefault(props)}
-      </div>
+      {/* While renderDefault is held back, show the cover via a plain
+          <img> from the CDN URL. As soon as the browser is idle we mount
+          renderDefault — which by then can resolve the asset listener
+          instantly and never shows its own "Loading…" state. */}
+      {nativeReady ? (
+        props.renderDefault(props)
+      ) : (
+        <CoverPreview previewUrl={previewUrl} alt={title} />
+      )}
 
       {picker ? (
         <CoverPickerDialog
@@ -209,6 +256,44 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
         />
       ) : null}
     </Stack>
+  );
+}
+
+function CoverPreview(props: { previewUrl?: string; alt?: string }) {
+  const { previewUrl, alt } = props;
+  return (
+    <div
+      style={{
+        width: 140,
+        aspectRatio: "2 / 3",
+        flex: "0 0 auto",
+        background: "var(--card-muted-bg-color, rgba(0,0,0,0.04))",
+        borderRadius: 6,
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        border: "1px solid var(--card-border-color, rgba(0,0,0,0.08))",
+      }}
+    >
+      {previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={previewUrl}
+          alt={alt || ""}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      ) : (
+        <Text muted size={4}>
+          <ImagesIcon />
+        </Text>
+      )}
+    </div>
   );
 }
 
