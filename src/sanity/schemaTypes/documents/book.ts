@@ -172,6 +172,15 @@ export const book = defineType({
       group: "details",
     }),
     defineField({
+      name: "summary",
+      title: "Book summary",
+      description:
+        "Publisher / Google Books description. Auto-filled on import; edit if needed.",
+      type: "text",
+      rows: 6,
+      group: "details",
+    }),
+    defineField({
       name: "externalLinks",
       title: "External Links",
       description: "Goodreads, publisher, etc.",

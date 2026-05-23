@@ -132,6 +132,7 @@ export const BOOK_QUERY = defineQuery(`
     publishedYear,
     kind,
     genres,
+    summary,
     cover{
       asset->{ _id, url, metadata { lqip, dimensions } },
       alt

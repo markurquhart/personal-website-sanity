@@ -63,6 +63,7 @@ type GoogleVolume = {
     publishedDate?: string;
     pageCount?: number;
     categories?: string[];
+    description?: string;
     industryIdentifiers?: { type: string; identifier: string }[];
     imageLinks?: {
       smallThumbnail?: string;
@@ -80,8 +81,29 @@ type SearchResult = {
   pageCount?: number;
   isbn?: string;
   categories: string[];
+  description?: string;
   thumbUrl?: string;
 };
+
+// Google's `description` is mostly plain text but can contain a small set
+// of HTML tags (<p>, <br>, <i>, <em>, <b>, <strong>) and entities. Convert
+// to clean text with paragraph + line breaks preserved.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\s*\/p\s*>\s*<\s*p[^>]*>/gi, "\n\n")
+    .replace(/<\s*p[^>]*>/gi, "")
+    .replace(/<\s*\/p\s*>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 type Phase =
   | { kind: "idle" }
@@ -142,6 +164,7 @@ function normalize(v: GoogleVolume): SearchResult {
     pageCount: info.pageCount,
     isbn: pickIsbn(info.industryIdentifiers),
     categories: info.categories || [],
+    description: info.description ? htmlToText(info.description) : undefined,
     thumbUrl: upgradeThumbUrl(
       info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail,
     ),
@@ -264,6 +287,7 @@ export function BookLookupInput(props: StringInputProps) {
         isbn: book.isbn,
         slug: { _type: "slug", current: slugify(book.title) },
       };
+      if (book.description) setFields.summary = book.description;
       if (book.subtitle) setFields.subtitle = book.subtitle;
       if (book.authors.length) setFields.authors = book.authors;
       if (book.categories.length) {

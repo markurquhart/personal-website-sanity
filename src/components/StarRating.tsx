@@ -1,5 +1,7 @@
 // Half-star aware rating display. Accepts 0–5 with 0.5 increments.
 
+import { useId } from "react";
+
 export function StarRating({
   value,
   size = 16,
@@ -25,7 +27,9 @@ export function StarRating({
 }
 
 function Star({ fill, size }: { fill: number; size: number }) {
-  const id = `star-${Math.random().toString(36).slice(2, 9)}`;
+  // useId gives a stable id that matches between SSR and client render.
+  // Math.random() would produce a hydration mismatch.
+  const id = `star-${useId()}`;
   return (
     <svg
       width={size}

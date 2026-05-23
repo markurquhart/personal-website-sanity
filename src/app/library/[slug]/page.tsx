@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PortableText, type PortableTextComponents } from "@portabletext/react";
 
+import { BookSingleBody, VARIANT_LABELS } from "@/components/BookSingleVariants";
 import { PageShell } from "@/components/PageShell";
-import { StarRating } from "@/components/StarRating";
 import { urlFor } from "@/sanity/lib/image";
 import { client } from "@/sanity/lib/client";
 import { sanityFetch } from "@/sanity/lib/live";
 import { BOOK_QUERY, BOOK_SLUGS_QUERY } from "@/sanity/lib/queries";
-import type { Book, BookEvent } from "@/sanity/lib/types";
+import type { Book } from "@/sanity/lib/types";
 
 export const revalidate = 60;
 
@@ -49,17 +48,6 @@ const STATUS_LABELS: Record<string, string> = {
   paused: "Paused",
 };
 
-const EVENT_LABELS: Record<BookEvent["type"], string> = {
-  added: "Added to library",
-  started: "Started reading",
-  paused: "Paused",
-  resumed: "Resumed",
-  finished: "Finished",
-  abandoned: "Abandoned",
-  rated: "Rated",
-  note: "Note",
-};
-
 function formatDate(iso?: string | null) {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-US", {
@@ -69,27 +57,19 @@ function formatDate(iso?: string | null) {
   });
 }
 
-const reviewComponents: PortableTextComponents = {
-  block: {
-    normal: ({ children }) => (
-      <p className="mb-4 text-[16px] leading-[1.7] text-[#404040]">
-        {children}
-      </p>
-    ),
-    blockquote: ({ children }) => (
-      <blockquote className="my-5 border-l-2 border-[#c0392b] pl-4 italic text-[#525252]">
-        {children}
-      </blockquote>
-    ),
-  },
-};
-
 export default async function BookPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ v?: string }>;
 }) {
   const { slug } = await params;
+  const { v } = await searchParams;
+  const parsed = Number(v);
+  const variant =
+    Number.isInteger(parsed) && parsed >= 1 && parsed <= 10 ? parsed : 1;
+
   const { data } = await sanityFetch({ query: BOOK_QUERY, params: { slug } });
   const book = data as Book | null;
   if (!book) notFound();
@@ -100,8 +80,6 @@ export default async function BookPage({
 
   const events = book.events || [];
 
-  // Contextual date matching the book's current status. Mirrors what
-  // BookCard shows in the library grid.
   const dateLine =
     book.status === "completed" && book.finishedAt
       ? `Finished ${formatDate(book.finishedAt)}`
@@ -110,16 +88,6 @@ export default async function BookPage({
         : book.status === "paused" && book.pausedAt
           ? `Paused ${formatDate(book.pausedAt)}`
           : null;
-
-  const metaBits = [
-    book.kind === "fiction"
-      ? "Fiction"
-      : book.kind === "non-fiction"
-        ? "Non-Fiction"
-        : null,
-    book.publishedYear ? `Published ${book.publishedYear}` : null,
-    book.pageCount ? `${book.pageCount} pages` : null,
-  ].filter(Boolean) as string[];
 
   return (
     <PageShell hideMobileProfile>
@@ -131,165 +99,48 @@ export default async function BookPage({
           ← Back to Library
         </Link>
 
-        {/* Top header — same shape as the blog single (label, title,
-            date + side meta). For books the side meta is the star
-            rating instead of "N min read". */}
+        {/* Header — locked across all variants. */}
         <header className="flex flex-col gap-4">
           {book.status && (
             <div className="text-[13px] font-semibold uppercase tracking-[0.05em] text-[#c0392b]">
               {STATUS_LABELS[book.status]}
             </div>
           )}
-          <h1 className="m-0 font-display text-[2rem] font-bold leading-[1.2] tracking-[-0.02em] text-[#333] md:text-[2.75rem]">
+          <h1 className="m-0 font-display text-[2rem] font-bold leading-[1.2] tracking-[-0.02em] text-[#111] md:text-[2.75rem]">
             {book.title}
           </h1>
-          <div className="flex items-center gap-4 text-[14px] text-[#888]">
-            {dateLine && <span>{dateLine}</span>}
-            {book.rating != null && (
-              <span className="inline-flex items-center align-middle">
-                <StarRating value={book.rating} size={14} />
-              </span>
-            )}
-          </div>
         </header>
 
-        {/* Two-column: cover on the left, the rest of the meta on the
-            right. Stacks on mobile. */}
-        <section className="flex flex-col gap-6 md:flex-row md:items-start md:gap-10">
-          {coverUrl ? (
-            <div
-              className="w-[200px] flex-shrink-0 overflow-hidden rounded-md border border-[#eee] bg-[#f3f3f3] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.25)] md:w-[240px]"
-              style={{ aspectRatio: "2 / 3" }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={coverUrl}
-                alt={book.cover?.alt || book.title || ""}
-                className="h-full w-full object-cover"
-              />
-            </div>
-          ) : (
-            <div
-              className="flex w-[200px] flex-shrink-0 items-center justify-center rounded-md border border-[#eee] bg-[#f3f3f3] text-[12px] text-[#aaa] md:w-[240px]"
-              style={{ aspectRatio: "2 / 3" }}
-            >
-              No cover
-            </div>
-          )}
+        <BookSingleBody
+          variant={variant}
+          book={book}
+          coverUrl={coverUrl}
+          dateLine={dateLine}
+          events={events}
+        />
 
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
-            {book.subtitle && (
-              <p className="m-0 text-[17px] leading-[1.4] text-[#666]">
-                {book.subtitle}
-              </p>
-            )}
-            {book.authors?.length ? (
-              <p className="m-0 text-[15px] text-[#525252]">
-                by{" "}
-                <span className="font-medium text-[#1a1a1a]">
-                  {book.authors.join(", ")}
-                </span>
-              </p>
-            ) : null}
-
-            {metaBits.length > 0 && (
-              <p className="m-0 text-[14px] leading-[1.6] text-[#888]">
-                {metaBits.join(" · ")}
-              </p>
-            )}
-
-            {book.favorite && (
-              <span className="inline-flex w-fit items-center rounded-full bg-[#fdecea] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#c0392b]">
-                ★ Favorite
-              </span>
-            )}
-
-            {book.genres?.length ? (
-              <div className="mt-1 flex flex-wrap gap-2">
-                {book.genres.map((g) => (
-                  <span
-                    key={g}
-                    className="rounded-full bg-[#f3f3f3] px-3 py-1 text-[12px] font-medium text-[#525252]"
-                  >
-                    {g}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
-            {book.externalLinks?.length ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {book.externalLinks.map((l) => (
-                  <a
-                    key={l.url}
-                    href={l.url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="rounded-md border border-[#ddd] px-3 py-1.5 text-[13px] text-[#525252] no-underline transition-colors hover:border-[#1a1a1a] hover:text-[#1a1a1a]"
-                  >
-                    {l.label} →
-                  </a>
-                ))}
-              </div>
-            ) : null}
+        {/* Variant switcher — temporary while we pick a layout. */}
+        <div className="mt-4 flex flex-col gap-2 rounded-md border border-dashed border-[#ddd] bg-[#fafafa] px-4 py-3 text-[12px] text-[#666]">
+          <div className="font-semibold uppercase tracking-[0.05em] text-[#999]">
+            Layout preview · v{variant} · {VARIANT_LABELS[variant]}
           </div>
-        </section>
-
-        {book.review && book.review.length > 0 && (
-          <>
-            <div className="h-px w-full bg-[#e6e6e6]" />
-            <div className="max-w-none">
-              <PortableText
-                value={book.review}
-                components={reviewComponents}
-              />
-            </div>
-          </>
-        )}
-
-        {events.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <h2 className="m-0 text-[13px] font-semibold uppercase tracking-[0.05em] text-[#999]">
-              Reading History
-            </h2>
-            <ol className="m-0 list-none border-l border-[#e5e5e5] pl-5">
-              {events.map((e) => (
-                <li key={e._key} className="relative mb-5 last:mb-0">
-                  <span className="absolute -left-[26px] top-[6px] block h-2 w-2 rounded-full bg-[#c0392b]" />
-                  <div className="flex flex-col">
-                    <div className="text-[14px] font-semibold text-[#333]">
-                      {EVENT_LABELS[e.type] || e.type}
-                      {e.type === "rated" && e.ratingValue != null && (
-                        <span className="ml-2 inline-flex items-center align-middle">
-                          <StarRating value={e.ratingValue} size={14} />
-                        </span>
-                      )}
-                    </div>
-                    {e.date && (
-                      <time className="text-[12px] text-[#999]">
-                        {formatDate(e.date)}
-                      </time>
-                    )}
-                    {e.note && (
-                      <p className="m-0 mt-1 text-[14px] text-[#525252]">
-                        {e.note}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
-
-        <div className="h-px w-full bg-[#e6e6e6]" />
-
-        <Link
-          href="/library"
-          className="inline-flex items-center gap-2 text-[14px] font-medium text-[#737373] no-underline transition-colors hover:text-[#1a1a1a]"
-        >
-          ← Back to Library
-        </Link>
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <Link
+                key={n}
+                href={`/library/${slug}?v=${n}`}
+                className={`rounded-md border px-2.5 py-1 text-[12px] no-underline transition-colors ${
+                  n === variant
+                    ? "border-[#1a1a1a] bg-[#1a1a1a] text-white"
+                    : "border-[#ddd] text-[#525252] hover:border-[#1a1a1a] hover:text-[#1a1a1a]"
+                }`}
+                title={VARIANT_LABELS[n]}
+              >
+                v{n}
+              </Link>
+            ))}
+          </div>
+        </div>
       </article>
     </PageShell>
   );

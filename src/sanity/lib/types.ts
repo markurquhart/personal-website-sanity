@@ -115,6 +115,7 @@ export type Book = BookSummary & {
   isbn?: string | null;
   addedAt?: string | null;
   abandonedAt?: string | null;
+  summary?: string | null;
   review?: PortableTextBlock[] | null;
   events?: BookEvent[] | null;
   externalLinks?: { label: string; url: string }[] | null;
