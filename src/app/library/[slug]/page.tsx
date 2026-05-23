@@ -100,6 +100,27 @@ export default async function BookPage({
 
   const events = book.events || [];
 
+  // Contextual date matching the book's current status. Mirrors what
+  // BookCard shows in the library grid.
+  const dateLine =
+    book.status === "completed" && book.finishedAt
+      ? `Finished ${formatDate(book.finishedAt)}`
+      : book.status === "currently-reading" && book.startedAt
+        ? `Started ${formatDate(book.startedAt)}`
+        : book.status === "paused" && book.pausedAt
+          ? `Paused ${formatDate(book.pausedAt)}`
+          : null;
+
+  const metaBits = [
+    book.kind === "fiction"
+      ? "Fiction"
+      : book.kind === "non-fiction"
+        ? "Non-Fiction"
+        : null,
+    book.publishedYear ? `Published ${book.publishedYear}` : null,
+    book.pageCount ? `${book.pageCount} pages` : null,
+  ].filter(Boolean) as string[];
+
   return (
     <PageShell hideMobileProfile>
       <article className="flex flex-col gap-8 px-5 pt-[22px] pb-[60px] xl:px-0">
@@ -110,89 +131,94 @@ export default async function BookPage({
           ← Back to Library
         </Link>
 
-        <header className="flex flex-col gap-6 md:flex-row md:gap-10">
-          <div
-            className="w-[200px] flex-shrink-0 overflow-hidden rounded-md border border-[#eee] bg-[#f3f3f3] md:w-[260px]"
-            style={{ aspectRatio: "2 / 3" }}
-          >
-            {coverUrl ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
+        {/* Top header — same shape as the blog single (label, title,
+            date + side meta). For books the side meta is the star
+            rating instead of "N min read". */}
+        <header className="flex flex-col gap-4">
+          {book.status && (
+            <div className="text-[13px] font-semibold uppercase tracking-[0.05em] text-[#c0392b]">
+              {STATUS_LABELS[book.status]}
+            </div>
+          )}
+          <h1 className="m-0 font-display text-[2rem] font-bold leading-[1.2] tracking-[-0.02em] text-[#333] md:text-[2.75rem]">
+            {book.title}
+          </h1>
+          <div className="flex items-center gap-4 text-[14px] text-[#888]">
+            {dateLine && <span>{dateLine}</span>}
+            {book.rating != null && (
+              <span className="inline-flex items-center align-middle">
+                <StarRating value={book.rating} size={14} />
+              </span>
+            )}
+          </div>
+        </header>
+
+        {/* Two-column: cover on the left, the rest of the meta on the
+            right. Stacks on mobile. */}
+        <section className="flex flex-col gap-6 md:flex-row md:items-start md:gap-10">
+          {coverUrl ? (
+            <div
+              className="w-[200px] flex-shrink-0 overflow-hidden rounded-md border border-[#eee] bg-[#f3f3f3] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.25)] md:w-[240px]"
+              style={{ aspectRatio: "2 / 3" }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={coverUrl}
                 alt={book.cover?.alt || book.title || ""}
                 className="h-full w-full object-cover"
               />
-            ) : (
-              <div className="flex h-full items-center justify-center text-[12px] text-[#aaa]">
-                No cover
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div
+              className="flex w-[200px] flex-shrink-0 items-center justify-center rounded-md border border-[#eee] bg-[#f3f3f3] text-[12px] text-[#aaa] md:w-[240px]"
+              style={{ aspectRatio: "2 / 3" }}
+            >
+              No cover
+            </div>
+          )}
 
-          <div className="flex flex-col gap-3">
-            {book.status && (
-              <div className="text-[13px] font-semibold uppercase tracking-[0.05em] text-[#c0392b]">
-                {STATUS_LABELS[book.status]}
-              </div>
-            )}
-            <h1 className="m-0 font-display text-[2rem] font-bold leading-[1.2] tracking-[-0.02em] text-[#333] md:text-[2.5rem]">
-              {book.title}
-            </h1>
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
             {book.subtitle && (
-              <p className="m-0 text-[16px] text-[#666]">{book.subtitle}</p>
-            )}
-            {book.authors?.length && (
-              <p className="m-0 text-[15px] text-[#525252]">
-                by {book.authors.join(", ")}
+              <p className="m-0 text-[17px] leading-[1.4] text-[#666]">
+                {book.subtitle}
               </p>
             )}
-            {book.rating != null && (
-              <div className="mt-1">
-                <StarRating value={book.rating} size={20} />
-              </div>
+            {book.authors?.length ? (
+              <p className="m-0 text-[15px] text-[#525252]">
+                by{" "}
+                <span className="font-medium text-[#1a1a1a]">
+                  {book.authors.join(", ")}
+                </span>
+              </p>
+            ) : null}
+
+            {metaBits.length > 0 && (
+              <p className="m-0 text-[14px] leading-[1.6] text-[#888]">
+                {metaBits.join(" · ")}
+              </p>
             )}
 
-            <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
-              {book.startedAt && (
-                <>
-                  <dt className="text-[#999]">Started</dt>
-                  <dd className="m-0 text-[#333]">{formatDate(book.startedAt)}</dd>
-                </>
-              )}
-              {book.finishedAt && (
-                <>
-                  <dt className="text-[#999]">Finished</dt>
-                  <dd className="m-0 text-[#333]">{formatDate(book.finishedAt)}</dd>
-                </>
-              )}
-              {book.pausedAt && (
-                <>
-                  <dt className="text-[#999]">Paused</dt>
-                  <dd className="m-0 text-[#333]">{formatDate(book.pausedAt)}</dd>
-                </>
-              )}
-              {book.pageCount && (
-                <>
-                  <dt className="text-[#999]">Pages</dt>
-                  <dd className="m-0 text-[#333]">{book.pageCount}</dd>
-                </>
-              )}
-              {book.publishedYear && (
-                <>
-                  <dt className="text-[#999]">Published</dt>
-                  <dd className="m-0 text-[#333]">{book.publishedYear}</dd>
-                </>
-              )}
-              {book.genres?.length && (
-                <>
-                  <dt className="text-[#999]">Genres</dt>
-                  <dd className="m-0 text-[#333]">{book.genres.join(", ")}</dd>
-                </>
-              )}
-            </dl>
+            {book.favorite && (
+              <span className="inline-flex w-fit items-center rounded-full bg-[#fdecea] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#c0392b]">
+                ★ Favorite
+              </span>
+            )}
 
-            {book.externalLinks?.length && (
-              <div className="mt-3 flex flex-wrap gap-3">
+            {book.genres?.length ? (
+              <div className="mt-1 flex flex-wrap gap-2">
+                {book.genres.map((g) => (
+                  <span
+                    key={g}
+                    className="rounded-full bg-[#f3f3f3] px-3 py-1 text-[12px] font-medium text-[#525252]"
+                  >
+                    {g}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {book.externalLinks?.length ? (
+              <div className="mt-2 flex flex-wrap gap-2">
                 {book.externalLinks.map((l) => (
                   <a
                     key={l.url}
@@ -205,22 +231,20 @@ export default async function BookPage({
                   </a>
                 ))}
               </div>
-            )}
+            ) : null}
           </div>
-        </header>
+        </section>
 
         {book.review && book.review.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <h2 className="m-0 text-[13px] font-semibold uppercase tracking-[0.05em] text-[#999]">
-              Review
-            </h2>
-            <div className="max-w-prose">
+          <>
+            <div className="h-px w-full bg-[#e6e6e6]" />
+            <div className="max-w-none">
               <PortableText
                 value={book.review}
                 components={reviewComponents}
               />
             </div>
-          </section>
+          </>
         )}
 
         {events.length > 0 && (
@@ -257,6 +281,15 @@ export default async function BookPage({
             </ol>
           </section>
         )}
+
+        <div className="h-px w-full bg-[#e6e6e6]" />
+
+        <Link
+          href="/library"
+          className="inline-flex items-center gap-2 text-[14px] font-medium text-[#737373] no-underline transition-colors hover:text-[#1a1a1a]"
+        >
+          ← Back to Library
+        </Link>
       </article>
     </PageShell>
   );

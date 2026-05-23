@@ -107,6 +107,7 @@ export const BOOKS_QUERY = defineQuery(`
       asset->{ _id, url, metadata { lqip } },
       alt
     },
+    kind,
     genres,
     status,
     startedAt,
@@ -129,6 +130,7 @@ export const BOOK_QUERY = defineQuery(`
     isbn,
     pageCount,
     publishedYear,
+    kind,
     genres,
     cover{
       asset->{ _id, url, metadata { lqip, dimensions } },

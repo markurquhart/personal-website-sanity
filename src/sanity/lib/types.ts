@@ -83,6 +83,7 @@ export type BookSummary = {
   slug?: string | null;
   authors?: string[] | null;
   cover?: SanityImageAsset | null;
+  kind?: "fiction" | "non-fiction" | null;
   genres?: string[] | null;
   status?: BookStatus | null;
   startedAt?: string | null;
