@@ -49,6 +49,22 @@ const STATUS_LABELS: Record<string, string> = {
   paused: "Paused",
 };
 
+// Empty-state copy for the Notes card varies by status so an Up Next
+// book reads "Haven't started yet" instead of "No notes yet".
+function getNotesEmptyMessage(status: string | null | undefined): string {
+  switch (status) {
+    case "currently-reading":
+      return "No notes yet — still reading.";
+    case "paused":
+      return "Paused mid-read. No notes captured.";
+    case "up-next":
+      return "Haven't started this one yet.";
+    case "completed":
+    default:
+      return "No written review yet.";
+  }
+}
+
 const EVENT_LABELS: Record<BookEvent["type"], string> = {
   added: "Added to library",
   started: "Started reading",
@@ -84,10 +100,11 @@ const reviewBlocks: PortableTextComponents = {
   },
 };
 
-// Small caps section label used for BOOK INFO, MARK'S REVIEW, BOOK
-// SUMMARY, READING HISTORY.
+// Small caps section label used for BOOK INFO, MY RATING, MY NOTES,
+// BOOK SUMMARY, READING HISTORY. Black so the label reads as a clear
+// section header.
 const LABEL_CLASS =
-  "m-0 text-[12px] font-semibold uppercase tracking-[0.06em] text-[#c0392b]";
+  "m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#111]";
 
 type MetaItem = { label: string; value: string; mono?: boolean };
 
@@ -133,16 +150,20 @@ export default async function BookPage({
   const events = book.events || [];
   const meta = getMetaItems(book);
   const hasReview = !!book.review?.length;
-  const showCard = hasReview || book.rating != null || !!book.favorite;
+  const notesEmpty = getNotesEmptyMessage(book.status);
 
-  const dateLine =
-    book.status === "completed" && book.finishedAt
-      ? `Finished ${formatDate(book.finishedAt)}`
-      : book.status === "currently-reading" && book.startedAt
-        ? `Started ${formatDate(book.startedAt)}`
-        : book.status === "paused" && book.pausedAt
-          ? `Paused ${formatDate(book.pausedAt)}`
-          : null;
+  // Every status gets a contextual date for the card. Falls back to
+  // `addedAt` for books that don't have a status-specific date yet.
+  const dateLine = (() => {
+    if (book.status === "completed" && book.finishedAt)
+      return `Finished ${formatDate(book.finishedAt)}`;
+    if (book.status === "currently-reading" && book.startedAt)
+      return `Started ${formatDate(book.startedAt)}`;
+    if (book.status === "paused" && book.pausedAt)
+      return `Paused ${formatDate(book.pausedAt)}`;
+    if (book.addedAt) return `Added ${formatDate(book.addedAt)}`;
+    return null;
+  })();
 
   return (
     <PageShell hideMobileProfile>
@@ -163,16 +184,15 @@ export default async function BookPage({
           <h1 className="m-0 font-display text-[2rem] font-bold leading-[1.2] tracking-[-0.02em] text-[#111] md:text-[2.75rem]">
             {book.title}
           </h1>
+          {dateLine && (
+            <div className="text-[14px] text-[#888]">{dateLine}</div>
+          )}
         </header>
 
-        {/* Date shows here only when there's no Mark's Review card to
-            host it. */}
-        {dateLine && !showCard && (
-          <div className="text-[14px] text-[#888]">{dateLine}</div>
-        )}
-
-        {/* Cover left, [Book Info dl | Mark's Review card] right. */}
-        <section className="flex flex-col gap-6 md:flex-row md:items-start md:gap-10">
+        {/* Cover left, [Book Info dl | morphing card] right. The card
+            always renders; its label + empty-state copy changes by
+            status so the layout stays consistent for every book. */}
+        <section className="flex flex-col gap-6 md:flex-row md:items-start md:gap-12">
           <div
             className="relative w-[200px] flex-shrink-0 overflow-hidden rounded-lg border border-[#eee] bg-[#f3f3f3] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.25)] md:w-[240px]"
             style={{ aspectRatio: "2 / 3" }}
@@ -191,14 +211,10 @@ export default async function BookPage({
             )}
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col gap-8">
-            <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-6">
+          <div className="flex min-w-0 flex-1 flex-col gap-10">
+            <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-8">
               {/* BOOK INFO column */}
-              <div
-                className={`flex flex-col gap-4 ${
-                  showCard ? "md:w-[300px] md:flex-shrink-0" : "md:flex-1"
-                }`}
-              >
+              <div className="flex flex-col gap-4 lg:w-[300px] lg:flex-shrink-0">
                 <h2 className={LABEL_CLASS}>Book Info</h2>
                 <dl className="m-0 grid gap-x-5 gap-y-2.5 text-[14px] leading-[1.5] md:grid-cols-[88px_minmax(0,1fr)]">
                   {meta.map((m) => (
@@ -232,28 +248,23 @@ export default async function BookPage({
                 </dl>
               </div>
 
-              {/* MARK'S REVIEW column */}
-              {showCard && (
-                <div className="flex min-w-0 flex-1 flex-col gap-4 md:self-stretch">
-                  <h2 className={LABEL_CLASS}>Mark&apos;s Review</h2>
-                  <div className="flex flex-1 flex-col gap-3 rounded-3xl bg-[#f9f9f9] px-7 py-6">
-                    {(book.rating != null || book.favorite) && (
-                      <div className="flex items-center justify-between gap-3">
-                        {book.rating != null ? (
-                          <StarRating value={book.rating} size={20} />
-                        ) : (
-                          <span />
-                        )}
-                        {book.favorite && (
-                          <span className="inline-flex items-center rounded-full bg-[#fdecea] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#c0392b]">
-                            ★ Favorite
-                          </span>
-                        )}
-                      </div>
+              {/* Right side: My Rating section, then My Notes card. */}
+              <div className="flex min-w-0 flex-1 flex-col gap-10 lg:self-stretch">
+                <div className="flex flex-col gap-4">
+                  <h2 className={LABEL_CLASS}>My Rating</h2>
+                  <div className="flex items-center gap-4">
+                    <StarRating value={book.rating ?? 0} size={22} />
+                    {book.favorite && (
+                      <span className="inline-flex items-center rounded-full bg-[#fdecea] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#c0392b]">
+                        ★ Favorite
+                      </span>
                     )}
-                    {dateLine && (
-                      <div className="text-[13px] text-[#888]">{dateLine}</div>
-                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <h2 className={LABEL_CLASS}>My Notes</h2>
+                  <div className="rounded-3xl bg-[#f9f9f9] px-7 py-6">
                     {hasReview ? (
                       <PortableText
                         value={book.review!}
@@ -261,12 +272,12 @@ export default async function BookPage({
                       />
                     ) : (
                       <p className="m-0 text-[14px] italic text-[#999]">
-                        No written review yet.
+                        {notesEmpty}
                       </p>
                     )}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
             {book.summary && (

@@ -30,6 +30,9 @@ function Star({ fill, size }: { fill: number; size: number }) {
   // useId gives a stable id that matches between SSR and client render.
   // Math.random() would produce a hydration mismatch.
   const id = `star-${useId()}`;
+  // Stroke follows fill so an empty star isn't outlined in red on a
+  // grey body — that looked like a red border on nothing.
+  const stroke = fill > 0 ? "#c0392b" : "#e5e5e5";
   return (
     <svg
       width={size}
@@ -47,7 +50,7 @@ function Star({ fill, size }: { fill: number; size: number }) {
       <path
         d="M12 2.5l2.92 5.92 6.54.95-4.73 4.61 1.12 6.51L12 17.27l-5.85 3.22 1.12-6.51-4.73-4.61 6.54-.95L12 2.5z"
         fill={`url(#${id})`}
-        stroke="#c0392b"
+        stroke={stroke}
         strokeWidth="0.6"
       />
     </svg>
