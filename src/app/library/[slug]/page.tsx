@@ -113,7 +113,6 @@ function getMetaItems(book: Book): MetaItem[] {
     book.authors?.length
       ? { label: "Author", value: book.authors.join(", ") }
       : false,
-    book.subtitle ? { label: "Subtitle", value: book.subtitle } : false,
     book.kind
       ? {
           label: "Type",
