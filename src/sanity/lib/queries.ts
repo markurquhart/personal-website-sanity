@@ -110,6 +110,7 @@ export const BOOKS_QUERY = defineQuery(`
     kind,
     genres,
     status,
+    addedAt,
     startedAt,
     finishedAt,
     pausedAt,

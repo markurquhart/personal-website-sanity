@@ -86,6 +86,7 @@ export type BookSummary = {
   kind?: "fiction" | "non-fiction" | null;
   genres?: string[] | null;
   status?: BookStatus | null;
+  addedAt?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   pausedAt?: string | null;
