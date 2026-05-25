@@ -2,13 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PortableText, type PortableTextComponents } from "@portabletext/react";
 
+import { BookListItem } from "@/components/BookListItem";
 import { PageShell } from "@/components/PageShell";
 import { StarRating } from "@/components/StarRating";
 import { urlFor } from "@/sanity/lib/image";
 import { client } from "@/sanity/lib/client";
 import { sanityFetch } from "@/sanity/lib/live";
-import { BOOK_QUERY, BOOK_SLUGS_QUERY } from "@/sanity/lib/queries";
-import type { Book, BookEvent } from "@/sanity/lib/types";
+import { BOOK_QUERY, BOOK_SLUGS_QUERY, BOOKS_QUERY } from "@/sanity/lib/queries";
+import type { Book, BookEvent, BookSummary } from "@/sanity/lib/types";
 
 export const revalidate = 60;
 
@@ -132,15 +133,63 @@ function getMetaItems(book: Book): MetaItem[] {
   return items.filter(Boolean) as MetaItem[];
 }
 
+function getRelatedBooks(current: Book, books: BookSummary[]): BookSummary[] {
+  const currentGenres = new Set(current.genres || []);
+  const currentAuthors = new Set(current.authors || []);
+
+  return books
+    .filter((candidate) => candidate.slug && candidate.slug !== current.slug)
+    .map((candidate) => {
+      const sharedGenres = (candidate.genres || []).filter((genre) =>
+        currentGenres.has(genre),
+      ).length;
+      const sharedAuthors = (candidate.authors || []).filter((author) =>
+        currentAuthors.has(author),
+      ).length;
+      const sameKind = candidate.kind && candidate.kind === current.kind ? 1 : 0;
+      const sameStatus =
+        candidate.status && candidate.status === current.status ? 1 : 0;
+      const dateValue = Math.max(
+        new Date(candidate.finishedAt || 0).getTime(),
+        new Date(candidate.startedAt || 0).getTime(),
+        new Date(candidate.addedAt || 0).getTime(),
+      );
+
+      return {
+        candidate,
+        score:
+          sharedGenres * 10 +
+          sharedAuthors * 8 +
+          sameKind * 3 +
+          sameStatus,
+        dateValue,
+      };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if ((b.candidate.rating || 0) !== (a.candidate.rating || 0)) {
+        return (b.candidate.rating || 0) - (a.candidate.rating || 0);
+      }
+      return b.dateValue - a.dateValue;
+    })
+    .slice(0, 4)
+    .map(({ candidate }) => candidate);
+}
+
 export default async function BookPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const { data } = await sanityFetch({ query: BOOK_QUERY, params: { slug } });
-  const book = data as Book | null;
+  const [{ data: bookData }, { data: booksData }] = await Promise.all([
+    sanityFetch({ query: BOOK_QUERY, params: { slug } }),
+    sanityFetch({ query: BOOKS_QUERY }),
+  ]);
+  const book = bookData as Book | null;
   if (!book) notFound();
+  const allBooks = (booksData as BookSummary[] | null) ?? [];
 
   const coverUrl = book.cover?.asset
     ? urlFor(book.cover).width(640).height(960).fit("crop").url()
@@ -150,6 +199,7 @@ export default async function BookPage({
   const meta = getMetaItems(book);
   const hasReview = !!book.review?.length;
   const notesEmpty = getNotesEmptyMessage(book.status);
+  const relatedBooks = getRelatedBooks(book, allBooks);
 
   // Every status gets a contextual date for the card. Falls back to
   // `addedAt` for books that don't have a status-specific date yet.
@@ -320,6 +370,25 @@ export default async function BookPage({
                 </li>
               ))}
             </ol>
+          </section>
+        )}
+
+        {relatedBooks.length > 0 && (
+          <section className="mt-4 flex flex-col gap-5 border-t border-[#ececec] pt-10">
+            <div className="flex flex-col gap-2">
+              <h2 className="m-0 font-display text-[1.4rem] font-semibold text-[#222]">
+                More Like This
+              </h2>
+              <p className="m-0 max-w-[42rem] text-[14px] leading-[1.6] text-[#8a8a8a]">
+                Other books in the library that overlap in genre, author, or
+                overall reading lane.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 xl:items-start">
+              {relatedBooks.map((relatedBook) => (
+                <BookListItem key={relatedBook._id} book={relatedBook} />
+              ))}
+            </div>
           </section>
         )}
       </article>
