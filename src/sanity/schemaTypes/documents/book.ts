@@ -87,12 +87,6 @@ export const book = defineType({
       },
     }),
     defineField({
-      name: "coverPreviewPending",
-      title: "Cover preview pending",
-      type: "boolean",
-      hidden: true,
-    }),
-    defineField({
       name: "summary",
       title: "Book summary",
       description:
