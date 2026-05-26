@@ -171,6 +171,7 @@ export function buildBookImportFields(
       asset: { _type: "reference", _ref: coverAssetId },
       alt: book.title,
     } satisfies ImageValue & { alt?: string };
+    setFields.coverPreviewPending = true;
   }
 
   Object.keys(setFields).forEach((key) => {
