@@ -9,7 +9,7 @@ import { urlFor } from "@/sanity/lib/image";
 import { client } from "@/sanity/lib/client";
 import { sanityFetch } from "@/sanity/lib/live";
 import { BOOK_QUERY, BOOK_SLUGS_QUERY, BOOKS_QUERY } from "@/sanity/lib/queries";
-import type { Book, BookEvent, BookSummary } from "@/sanity/lib/types";
+import type { Book, BookSummary } from "@/sanity/lib/types";
 
 export const revalidate = 60;
 
@@ -66,17 +66,6 @@ function getNotesEmptyMessage(status: string | null | undefined): string {
   }
 }
 
-const EVENT_LABELS: Record<BookEvent["type"], string> = {
-  added: "Added to library",
-  started: "Started reading",
-  paused: "Paused",
-  resumed: "Resumed",
-  finished: "Finished",
-  abandoned: "Abandoned",
-  rated: "Rated",
-  note: "Note",
-};
-
 function formatDate(iso?: string | null) {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-US", {
@@ -102,8 +91,7 @@ const reviewBlocks: PortableTextComponents = {
 };
 
 // Small caps section label used for BOOK INFO, MY RATING, MY NOTES,
-// BOOK SUMMARY, READING HISTORY. Black so the label reads as a clear
-// section header.
+// and BOOK SUMMARY. Black so the label reads as a clear section header.
 const LABEL_CLASS =
   "m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#111]";
 
@@ -195,7 +183,6 @@ export default async function BookPage({
     ? urlFor(book.cover).width(640).height(960).fit("crop").url()
     : null;
 
-  const events = book.events || [];
   const meta = getMetaItems(book);
   const hasReview = !!book.review?.length;
   const notesEmpty = getNotesEmptyMessage(book.status);
@@ -339,39 +326,6 @@ export default async function BookPage({
             )}
           </div>
         </section>
-
-        {events.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <h2 className={LABEL_CLASS}>Reading History</h2>
-            <ol className="m-0 list-none border-l border-[#e5e5e5] pl-5">
-              {events.map((e) => (
-                <li key={e._key} className="relative mb-5 last:mb-0">
-                  <span className="absolute -left-[26px] top-[6px] block h-2 w-2 rounded-full bg-[#c0392b] ring-2 ring-[#fcd9d4]" />
-                  <div className="flex flex-col">
-                    <div className="text-[14px] font-semibold text-[#333]">
-                      {EVENT_LABELS[e.type] || e.type}
-                      {e.type === "rated" && e.ratingValue != null && (
-                        <span className="ml-2 inline-flex items-center align-middle">
-                          <StarRating value={e.ratingValue} size={14} />
-                        </span>
-                      )}
-                    </div>
-                    {e.date && (
-                      <time className="text-[12px] text-[#999]">
-                        {formatDate(e.date)}
-                      </time>
-                    )}
-                    {e.note && (
-                      <p className="m-0 mt-1 text-[14px] text-[#525252]">
-                        {e.note}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
 
         {relatedBooks.length > 0 && (
           <section className="mt-4 flex flex-col gap-5 border-t border-[#ececec] pt-10">

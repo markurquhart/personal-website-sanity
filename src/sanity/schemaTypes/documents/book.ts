@@ -50,17 +50,6 @@ export const GENRES = [
   "Young Adult",
 ];
 
-const EVENT_TYPES = [
-  { title: "Added to library", value: "added" },
-  { title: "Started reading", value: "started" },
-  { title: "Paused", value: "paused" },
-  { title: "Resumed", value: "resumed" },
-  { title: "Finished", value: "finished" },
-  { title: "Abandoned", value: "abandoned" },
-  { title: "Rated", value: "rated" },
-  { title: "Note", value: "note" },
-];
-
 export const book = defineType({
   name: "book",
   title: "Book",
@@ -76,7 +65,6 @@ export const book = defineType({
       title: "Review",
       hidden: ({ document }) => document?.status !== "completed",
     },
-    { name: "history", title: "History" },
   ],
   fields: [
     defineField({
@@ -221,8 +209,7 @@ export const book = defineType({
       title: "Started at",
       type: "date",
       group: "status",
-      description:
-        "Date you started reading this attempt. For re-reads, update this and add a 'started' event in History.",
+      description: "Date you started reading this attempt.",
     }),
     defineField({
       name: "finishedAt",
@@ -293,66 +280,6 @@ export const book = defineType({
       ],
     }),
 
-    // History
-    defineField({
-      name: "events",
-      title: "Reading history",
-      description:
-        "Append-only log. When you change status, add an event here to preserve the timeline (e.g., paused → resumed → finished).",
-      type: "array",
-      group: "history",
-      of: [
-        defineArrayMember({
-          type: "object",
-          name: "bookEvent",
-          title: "Event",
-          fields: [
-            defineField({
-              name: "type",
-              title: "Event",
-              type: "string",
-              options: {
-                list: EVENT_TYPES,
-              },
-              validation: (rule) => rule.required(),
-            }),
-            defineField({
-              name: "date",
-              title: "Date",
-              type: "date",
-              validation: (rule) => rule.required(),
-            }),
-            defineField({
-              name: "ratingValue",
-              title: "Rating (if event is 'Rated')",
-              type: "number",
-              hidden: ({ parent }) => parent?.type !== "rated",
-              validation: (rule) => rule.min(0).max(5).precision(1),
-            }),
-            defineField({
-              name: "note",
-              title: "Note",
-              type: "string",
-            }),
-          ],
-          preview: {
-            select: {
-              type: "type",
-              date: "date",
-              note: "note",
-            },
-            prepare({ type, date, note }) {
-              const label =
-                EVENT_TYPES.find((t) => t.value === type)?.title || type;
-              return {
-                title: `${label} · ${date || ""}`,
-                subtitle: note || "",
-              };
-            },
-          },
-        }),
-      ],
-    }),
   ],
   orderings: [
     {

@@ -147,13 +147,6 @@ export const BOOK_QUERY = defineQuery(`
     rating,
     favorite,
     review,
-    events[] | order(date asc){
-      _key,
-      type,
-      date,
-      ratingValue,
-      note
-    },
     externalLinks[]{ label, url }
   }
 `);
