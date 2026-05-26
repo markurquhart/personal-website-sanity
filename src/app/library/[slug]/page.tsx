@@ -78,12 +78,12 @@ function formatDate(iso?: string | null) {
 const reviewBlocks: PortableTextComponents = {
   block: {
     normal: ({ children }) => (
-      <p className="mb-4 text-[15px] leading-[1.65] text-[#404040] last:mb-0">
+      <p className="mb-4 max-w-[42rem] text-[16px] leading-[1.8] text-[#2f2f2f] last:mb-0">
         {children}
       </p>
     ),
     blockquote: ({ children }) => (
-      <blockquote className="my-4 border-l-2 border-[#c0392b] pl-4 italic text-[#525252] last:mb-0">
+      <blockquote className="my-4 border-l-2 border-[#c0392b] pl-4 italic text-[#4d4d4d] last:mb-0">
         {children}
       </blockquote>
     ),
@@ -186,6 +186,7 @@ export default async function BookPage({
   const meta = getMetaItems(book);
   const hasReview = !!book.review?.length;
   const notesEmpty = getNotesEmptyMessage(book.status);
+  const reviewLabel = hasReview ? "My Review" : "My Notes";
   const relatedBooks = getRelatedBooks(book, allBooks);
 
   // Every status gets a contextual date for the card. Falls back to
@@ -284,7 +285,8 @@ export default async function BookPage({
                 </dl>
               </div>
 
-              {/* Right side: My Rating section, then My Notes card. */}
+              {/* Right side: My Rating section. Review lives below at full
+                  width so it reads as commentary, not metadata. */}
               <div className="flex min-w-0 flex-1 flex-col gap-10 lg:self-stretch">
                 <div className="flex flex-col gap-4">
                   <h2 className={LABEL_CLASS}>My Rating</h2>
@@ -297,23 +299,31 @@ export default async function BookPage({
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
 
-                <div className="flex flex-col gap-3">
-                  <h2 className={LABEL_CLASS}>My Notes</h2>
-                  <div className="rounded-3xl bg-[#f9f9f9] px-7 py-6">
-                    {hasReview ? (
-                      <PortableText
-                        value={book.review!}
-                        components={reviewBlocks}
-                      />
-                    ) : (
-                      <p className="m-0 text-[14px] italic text-[#999]">
-                        {notesEmpty}
-                      </p>
-                    )}
+            <div className="flex flex-col gap-4 border-t border-[#e8e2db] pt-8">
+              <h2 className={LABEL_CLASS}>{reviewLabel}</h2>
+              {hasReview ? (
+                <div className="relative max-w-[52rem] pt-2 pl-12">
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-0 left-0 font-serif text-[5rem] leading-none text-[#ddd8d2]"
+                  >
+                    “
+                  </div>
+                  <div>
+                    <PortableText
+                      value={book.review!}
+                      components={reviewBlocks}
+                    />
                   </div>
                 </div>
-              </div>
+              ) : (
+                <p className="m-0 max-w-[42rem] text-[14px] italic text-[#8a8a8a]">
+                  {notesEmpty}
+                </p>
+              )}
             </div>
 
             {book.summary && (
