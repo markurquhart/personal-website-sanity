@@ -37,3 +37,13 @@ export const studioGoogleBooksApiKey = readStudioEnv(
   "SANITY_STUDIO_GOOGLE_BOOKS_API",
   "NEXT_PUBLIC_GOOGLE_BOOKS_API",
 );
+
+const inferredSiteUrl =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1")
+    ? "http://localhost:3000"
+    : "https://markurquhart.com";
+
+export const studioPublicSiteUrl =
+  readStudioEnv("SANITY_STUDIO_SITE_URL", "NEXT_PUBLIC_SITE_URL") || inferredSiteUrl;

@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "routes": [
     {
-      "src": "/((?!static/|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)",
+      "src": "/((?!api/|static/|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)",
       "has": [
         {
           "type": "host",

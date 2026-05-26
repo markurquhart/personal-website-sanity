@@ -7,6 +7,8 @@
 
 import type { SanityClient } from "@sanity/client";
 
+import { studioPublicSiteUrl } from "../studioEnv";
+
 // Build a Google Books content URL for a volume at a given zoom. Zoom 3 is a
 // large frontcover (~600×900px-ish, depending on the source scan); zoom 2 is
 // medium; zoom 1 is the small thumbnail. We strip the &edge=curl param that
@@ -42,6 +44,12 @@ function decodeImage(
   });
 }
 
+function coverProxyUrl(upstream: string): string {
+  const proxyUrl = new URL("/api/cover-proxy", studioPublicSiteUrl);
+  proxyUrl.searchParams.set("url", upstream);
+  return proxyUrl.toString();
+}
+
 // Fetch image bytes through the same-origin proxy. Validates the response
 // shape so we don't pass HTML or partial data downstream.
 export async function fetchGoogleCover(
@@ -50,7 +58,7 @@ export async function fetchGoogleCover(
   timeoutMs = 15000,
 ): Promise<Blob> {
   const upstream = googleCoverUrl(volumeId, zoom);
-  const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(upstream)}`;
+  const proxyUrl = coverProxyUrl(upstream);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -85,7 +93,7 @@ export async function fetchOpenLibraryCover(
   const upstream = `https://covers.openlibrary.org/b/id/${encodeURIComponent(
     String(coverId),
   )}-L.jpg?default=false`;
-  const proxyUrl = `/api/cover-proxy?url=${encodeURIComponent(upstream)}`;
+  const proxyUrl = coverProxyUrl(upstream);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);

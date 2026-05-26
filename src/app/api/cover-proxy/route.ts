@@ -15,23 +15,57 @@ const ALLOWED_HOSTS = new Set([
   "covers.openlibrary.org",
 ]);
 
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin");
+  if (!origin) return {};
+
+  try {
+    const { hostname, protocol } = new URL(origin);
+    const isStudioHost =
+      protocol === "https:" &&
+      (hostname === "studio.markurquhart.com" ||
+        (hostname.endsWith(".vercel.app") &&
+          hostname.includes("personal-website-studio")));
+    const isLocalStudio =
+      protocol === "http:" &&
+      (hostname === "localhost" || hostname === "127.0.0.1");
+
+    if (!isStudioHost && !isLocalStudio) return {};
+
+    return {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Methods": "GET,HEAD,OPTIONS",
+      Vary: "Origin",
+    };
+  } catch {
+    return {};
+  }
+}
+
 async function handle(req: Request, headOnly: boolean) {
+  const corsHeaders = getCorsHeaders(req);
   const url = new URL(req.url).searchParams.get("url");
   if (!url) {
-    return NextResponse.json({ error: "missing url" }, { status: 400 });
+    return NextResponse.json(
+      { error: "missing url" },
+      { status: 400, headers: corsHeaders },
+    );
   }
 
   let target: URL;
   try {
     target = new URL(url);
   } catch {
-    return NextResponse.json({ error: "invalid url" }, { status: 400 });
+    return NextResponse.json(
+      { error: "invalid url" },
+      { status: 400, headers: corsHeaders },
+    );
   }
 
   if (!ALLOWED_HOSTS.has(target.hostname)) {
     return NextResponse.json(
       { error: `host '${target.hostname}' not allowed` },
-      { status: 403 },
+      { status: 403, headers: corsHeaders },
     );
   }
 
@@ -43,6 +77,7 @@ async function handle(req: Request, headOnly: boolean) {
   if (!res.ok) {
     return new Response(headOnly ? null : `upstream ${res.status}`, {
       status: res.status,
+      headers: corsHeaders,
     });
   }
 
@@ -50,7 +85,10 @@ async function handle(req: Request, headOnly: boolean) {
   if (!contentType.startsWith("image/")) {
     return new Response(headOnly ? null : "non-image upstream", {
       status: 415,
-      headers: { "Content-Type": "text/plain" },
+      headers: {
+        "Content-Type": "text/plain",
+        ...corsHeaders,
+      },
     });
   }
 
@@ -58,6 +96,7 @@ async function handle(req: Request, headOnly: boolean) {
     headers: {
       "Content-Type": contentType,
       "Cache-Control": "public, max-age=3600",
+      ...corsHeaders,
     },
   });
 }
@@ -68,4 +107,11 @@ export async function GET(req: Request) {
 
 export async function HEAD(req: Request) {
   return handle(req, true);
+}
+
+export async function OPTIONS(req: Request) {
+  return new Response(null, {
+    status: 204,
+    headers: getCorsHeaders(req),
+  });
 }
