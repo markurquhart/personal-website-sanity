@@ -14,6 +14,15 @@ import { urlFor } from "../lib/image";
 
 import { normalizeDocumentOperationId } from "./bookImportHelpers";
 
+function loadPreviewImage(src: string) {
+  return new Promise<void>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("Preview image failed to load"));
+    img.src = src;
+  });
+}
+
 export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
   const client = useClient({ apiVersion: "2024-01-01" });
   const docId = useFormValue(["_id"]) as string | undefined;
@@ -52,6 +61,14 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
 
           if (doc?.url) {
             if (cancelled) return;
+            if (previewUrl) {
+              try {
+                await loadPreviewImage(previewUrl);
+              } catch {
+                // Keep polling until the actual preview URL is fetchable too.
+                throw new Error("Preview URL not ready yet");
+              }
+            }
             setReadyAssetRef(assetRef);
             if (operationId && docType) {
               docOp.patch.execute([{ unset: ["coverPreviewPending"] }]);
@@ -76,7 +93,16 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
     return () => {
       cancelled = true;
     };
-  }, [assetRef, client, docOp.patch, docType, operationId, previewPending, readyAssetRef]);
+  }, [
+    assetRef,
+    client,
+    docOp.patch,
+    docType,
+    operationId,
+    previewPending,
+    previewUrl,
+    readyAssetRef,
+  ]);
 
   if (previewPending && assetRef && readyAssetRef !== assetRef && previewUrl) {
     return (
