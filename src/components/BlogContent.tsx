@@ -17,11 +17,13 @@ const CATEGORIES = [
 function Pill({
   active,
   onClick,
-  children,
+  label,
+  count,
 }: {
   active: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  label: string;
+  count: number;
 }) {
   return (
     <button
@@ -33,29 +35,16 @@ function Pill({
           : "border-[#ddd] bg-white text-[#666] hover:border-[#333] hover:text-[#333]"
       }`}
     >
-      {children}
-    </button>
-  );
-}
-
-function SortBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`cursor-pointer rounded-[4px] px-2 py-1 text-[12px] transition-colors ${
-        active ? "font-semibold text-[#333]" : "text-[#888] hover:text-[#333]"
-      }`}
-    >
-      {children}
+      <span className="flex items-center gap-2">
+        <span>{label}</span>
+        <span
+          className={`rounded-full px-2 py-[2px] text-[11px] leading-none ${
+            active ? "bg-white/18 text-white" : "bg-[#f4f3ef] text-[#888]"
+          }`}
+        >
+          {count}
+        </span>
+      </span>
     </button>
   );
 }
@@ -161,17 +150,26 @@ export function BlogContent({ posts }: { posts: PostSummary[] }) {
 
   const featured = useMemo(() => posts.find((p) => p.featured), [posts]);
   const rest = useMemo(() => posts.filter((p) => !p.featured), [posts]);
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: posts.length };
+    for (const categoryName of CATEGORIES) {
+      counts[categoryName] = posts.filter((p) => p.category === categoryName).length;
+    }
+    return counts;
+  }, [posts]);
 
   const filtered = useMemo(() => {
     const arr =
-      category === "all" ? [...rest] : rest.filter((p) => p.category === category);
+      category === "all"
+        ? [...rest]
+        : posts.filter((p) => p.category === category);
     arr.sort((a, b) => {
       const ad = new Date(a.publishedAt || 0).getTime();
       const bd = new Date(b.publishedAt || 0).getTime();
       return sort === "newest" ? bd - ad : ad - bd;
     });
     return arr;
-  }, [rest, category, sort]);
+  }, [posts, rest, category, sort]);
 
   return (
     <div className="flex min-h-screen flex-col gap-8 px-5 py-[22px] pb-[42px] xl:px-0">
@@ -186,34 +184,33 @@ export function BlogContent({ posts }: { posts: PostSummary[] }) {
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e5e5e5] pb-3">
         <div className="flex flex-wrap gap-2">
-          <Pill active={category === "all"} onClick={() => setCategory("all")}>
-            All
-          </Pill>
+          <Pill
+            active={category === "all"}
+            onClick={() => setCategory("all")}
+            label="All"
+            count={categoryCounts.all || 0}
+          />
           {CATEGORIES.map((c) => (
             <Pill
               key={c}
               active={category === c}
               onClick={() => setCategory(c)}
-            >
-              {c}
-            </Pill>
+              label={c}
+              count={categoryCounts[c] || 0}
+            />
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] text-[#999]">Sort:</span>
-          <SortBtn
-            active={sort === "newest"}
-            onClick={() => setSort("newest")}
+        <label className="block w-full xl:w-auto">
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as "newest" | "oldest")}
+            aria-label="Sort blog posts"
+            className="w-full cursor-pointer rounded-full border border-[#ddd] bg-white px-4 py-[7px] text-[13px] text-[#333] focus:border-[#333] focus:outline-none xl:w-[150px]"
           >
-            Newest
-          </SortBtn>
-          <SortBtn
-            active={sort === "oldest"}
-            onClick={() => setSort("oldest")}
-          >
-            Oldest
-          </SortBtn>
-        </div>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+          </select>
+        </label>
       </div>
 
       {featured && category === "all" && (

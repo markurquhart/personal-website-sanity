@@ -58,10 +58,10 @@ export function BookListItem({ book }: { book: BookSummary }) {
   return (
     <Link
       href={`/library/${book.slug}`}
-      className="group flex gap-4 rounded-[16px] border border-[#ececec] bg-white p-4 text-inherit no-underline transition-all duration-200 hover:border-[#d7d7d7] hover:shadow-[0_14px_32px_-20px_rgba(0,0,0,0.28)]"
+      className="group flex gap-4 rounded-[18px] border border-[#ebe9e3] bg-white p-4 text-inherit no-underline transition-all duration-200 hover:-translate-y-[1px] hover:border-[#d8d6cf] hover:shadow-[0_18px_38px_-24px_rgba(17,24,39,0.22)] xl:p-5"
     >
       <div
-        className="relative w-[84px] flex-shrink-0 overflow-hidden rounded-[10px] border border-[#efefef] bg-[#f3f3f3] xl:w-[96px]"
+        className="relative w-[86px] flex-shrink-0 overflow-hidden rounded-[12px] border border-[#efede7] bg-[#f4f2ee] shadow-[0_8px_18px_-16px_rgba(15,23,42,0.3)] xl:w-[100px]"
         style={{ aspectRatio: "2 / 3" }}
       >
         {coverUrl ? (
@@ -79,18 +79,18 @@ export function BookListItem({ book }: { book: BookSummary }) {
         )}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#999]">
           {label && <span className="text-[#c0392b]">{label}</span>}
           {book.favorite && <span>Favorite</span>}
         </div>
 
-        <div className="flex min-w-0 flex-col gap-1">
-          <h3 className="m-0 truncate font-display text-[1.05rem] font-semibold leading-[1.2] text-[#171717]">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <h3 className="m-0 truncate font-display text-[1.1rem] font-semibold leading-[1.2] text-[#171717]">
             {book.title}
           </h3>
           {book.subtitle && (
-            <p className="m-0 truncate text-[13px] text-[#777]">{book.subtitle}</p>
+            <p className="m-0 truncate text-[13px] text-[#757575]">{book.subtitle}</p>
           )}
           {book.authors?.length ? (
             <p className="m-0 truncate text-[13px] text-[#666]">
@@ -100,14 +100,16 @@ export function BookListItem({ book }: { book: BookSummary }) {
         </div>
 
         {meta.length > 0 && (
-          <p className="m-0 text-[12px] leading-[1.5] text-[#8a8a8a]">
+          <p className="m-0 text-[12px] leading-[1.6] text-[#8a8a8a]">
             {meta.join(" · ")}
           </p>
         )}
 
-        <div className="mt-auto flex flex-wrap items-center gap-3 text-[12px] text-[#999]">
-          {book.rating != null && <StarRating value={book.rating} size={14} />}
-          {bookDateLine && <span>{bookDateLine}</span>}
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 text-[12px] text-[#999]">
+          <div className="flex flex-wrap items-center gap-3">
+            {book.rating != null && <StarRating value={book.rating} size={14} />}
+            {bookDateLine && <span>{bookDateLine}</span>}
+          </div>
           <span className="font-medium text-[#1a1a1a] transition-transform duration-200 group-hover:translate-x-0.5">
             Open book →
           </span>
