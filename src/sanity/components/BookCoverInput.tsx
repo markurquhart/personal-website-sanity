@@ -1,7 +1,7 @@
 "use client";
 
-import { Stack, Text } from "@sanity/ui";
-import { useEffect, useMemo, useState } from "react";
+import { Button, Stack, Text } from "@sanity/ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useClient,
   useDocumentOperation,
@@ -34,7 +34,6 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
   );
   const docOp = useDocumentOperation(operationId, docType || "book");
   const assetRef = props.value?.asset?._ref;
-  const [readyAssetRef, setReadyAssetRef] = useState<string | null>(null);
 
   const previewUrl = useMemo(() => {
     if (!props.value?.asset?._ref) return undefined;
@@ -45,8 +44,44 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
     }
   }, [props.value]);
 
+  const clearPreviewPending = useCallback(() => {
+    if (previewPending && operationId && docType) {
+      docOp.patch.execute([{ unset: ["coverPreviewPending"] }]);
+    }
+  }, [docOp.patch, docType, operationId, previewPending]);
+
+  if (!assetRef || !previewUrl) {
+    return props.renderDefault(props);
+  }
+
+  return (
+    <StableCoverPreview
+      key={`${docId || "new"}:${assetRef}`}
+      assetRef={assetRef}
+      client={client}
+      previewPending={Boolean(previewPending)}
+      previewUrl={previewUrl}
+      renderNativeInput={() => props.renderDefault(props)}
+      onPreviewReady={clearPreviewPending}
+    />
+  );
+}
+
+function StableCoverPreview(props: {
+  assetRef: string;
+  client: ReturnType<typeof useClient>;
+  onPreviewReady: () => void;
+  previewPending: boolean;
+  previewUrl: string;
+  renderNativeInput: () => React.ReactNode;
+}) {
+  const { assetRef, client, onPreviewReady, previewPending, previewUrl, renderNativeInput } =
+    props;
+  const [showNativeInput, setShowNativeInput] = useState(false);
+  const [nativeReady, setNativeReady] = useState(!previewPending);
+
   useEffect(() => {
-    if (!previewPending || !assetRef || readyAssetRef === assetRef) return;
+    if (!previewPending) return;
 
     let cancelled = false;
     const deadline = Date.now() + 15000;
@@ -61,18 +96,14 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
 
           if (doc?.url) {
             if (cancelled) return;
-            if (previewUrl) {
-              try {
-                await loadPreviewImage(previewUrl);
-              } catch {
-                // Keep polling until the actual preview URL is fetchable too.
-                throw new Error("Preview URL not ready yet");
-              }
+            try {
+              await loadPreviewImage(previewUrl);
+            } catch {
+              // Keep polling until the actual preview URL is fetchable too.
+              throw new Error("Preview URL not ready yet");
             }
-            setReadyAssetRef(assetRef);
-            if (operationId && docType) {
-              docOp.patch.execute([{ unset: ["coverPreviewPending"] }]);
-            }
+            setNativeReady(true);
+            onPreviewReady();
             return;
           }
         } catch {
@@ -80,7 +111,7 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
         }
 
         if (Date.now() >= deadline) {
-          setReadyAssetRef(assetRef);
+          setNativeReady(true);
           return;
         }
 
@@ -93,52 +124,64 @@ export function BookCoverInput(props: ObjectInputProps<ImageValue>) {
     return () => {
       cancelled = true;
     };
-  }, [
-    assetRef,
-    client,
-    docOp.patch,
-    docType,
-    operationId,
-    previewPending,
-    previewUrl,
-    readyAssetRef,
-  ]);
+  }, [assetRef, client, onPreviewReady, previewPending, previewUrl]);
 
-  if (previewPending && assetRef && readyAssetRef !== assetRef && previewUrl) {
+  if (showNativeInput && nativeReady) {
     return (
       <Stack space={3}>
-        <div
-          style={{
-            width: 140,
-            aspectRatio: "2 / 3",
-            flex: "0 0 auto",
-            background: "var(--card-muted-bg-color, rgba(0,0,0,0.04))",
-            borderRadius: 6,
-            overflow: "hidden",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: "1px solid var(--card-border-color, rgba(0,0,0,0.08))",
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={previewUrl}
-            alt=""
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
-        </div>
-        <Text muted size={1}>
-          Finalizing cover preview...
-        </Text>
+        <Button
+          text="Back to cover preview"
+          mode="ghost"
+          tone="primary"
+          onClick={() => setShowNativeInput(false)}
+        />
+        {renderNativeInput()}
       </Stack>
     );
   }
 
-  return props.renderDefault(props);
+  return (
+    <Stack space={3}>
+      <div
+        style={{
+          width: 140,
+          aspectRatio: "2 / 3",
+          flex: "0 0 auto",
+          background: "var(--card-muted-bg-color, rgba(0,0,0,0.04))",
+          borderRadius: 6,
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: "1px solid var(--card-border-color, rgba(0,0,0,0.08))",
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={previewUrl}
+          alt=""
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      </div>
+      <Stack space={2}>
+        <Button
+          text={nativeReady ? "Edit cover details" : "Preparing image tools..."}
+          mode="ghost"
+          tone="primary"
+          disabled={!nativeReady}
+          onClick={() => setShowNativeInput(true)}
+        />
+        <Text muted size={1}>
+          {previewPending && !nativeReady
+            ? "Finalizing cover preview..."
+            : "Stable preview shown by default. Open image tools when you want to crop, replace, or edit alt text."}
+        </Text>
+      </Stack>
+    </Stack>
+  );
 }
