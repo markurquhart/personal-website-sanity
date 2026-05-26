@@ -43,7 +43,7 @@ const inferredSiteUrl =
   (window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1")
     ? "http://localhost:3000"
-    : "https://markurquhart.com";
+    : "https://www.markurquhart.com";
 
 export const studioPublicSiteUrl =
   readStudioEnv("SANITY_STUDIO_SITE_URL", "NEXT_PUBLIC_SITE_URL") || inferredSiteUrl;
