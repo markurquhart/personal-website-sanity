@@ -29,9 +29,10 @@ import {
   fetchOpenLibraryCover,
   uploadCoverBlob,
 } from "./bookCoverHelpers";
+import { studioGoogleBooksApiKey } from "../studioEnv";
 
 const GOOGLE_BOOKS_API = "https://www.googleapis.com/books/v1/volumes";
-const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API;
+const GOOGLE_API_KEY = studioGoogleBooksApiKey;
 const OPEN_LIBRARY_API = "https://openlibrary.org/search.json";
 
 type CoverSource = "google" | "openlibrary";

@@ -2,8 +2,10 @@
 
 import type { ImageValue } from "sanity";
 
+import { studioGoogleBooksApiKey } from "../studioEnv";
+
 const GOOGLE_BOOKS_API = "https://www.googleapis.com/books/v1/volumes";
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API;
+const API_KEY = studioGoogleBooksApiKey;
 
 type GoogleVolume = {
   id: string;
