@@ -99,7 +99,6 @@ export type BookSummary = {
 export type Book = BookSummary & {
   isbn?: string | null;
   addedAt?: string | null;
-  abandonedAt?: string | null;
   summary?: string | null;
   review?: PortableTextBlock[] | null;
   externalLinks?: { label: string; url: string }[] | null;

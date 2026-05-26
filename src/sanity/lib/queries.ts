@@ -143,7 +143,6 @@ export const BOOK_QUERY = defineQuery(`
     startedAt,
     finishedAt,
     pausedAt,
-    abandonedAt,
     rating,
     favorite,
     review,
