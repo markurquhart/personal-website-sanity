@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "routes": [
+    {
+      "src": "/((?!static/|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "(studio\\.markurquhart\\.com|personal-website-studio-taupe\\.vercel\\.app)"
+        }
+      ],
+      "dest": "/"
+    }
+  ]
+}
