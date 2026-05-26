@@ -78,6 +78,7 @@ function StableCoverPreview(props: {
   const { assetRef, client, onPreviewReady, previewPending, previewUrl, renderNativeInput } =
     props;
   const [showNativeInput, setShowNativeInput] = useState(false);
+  const [hasOpenedNativeInput, setHasOpenedNativeInput] = useState(false);
   const [nativeReady, setNativeReady] = useState(!previewPending);
 
   useEffect(() => {
@@ -126,62 +127,72 @@ function StableCoverPreview(props: {
     };
   }, [assetRef, client, onPreviewReady, previewPending, previewUrl]);
 
-  if (showNativeInput && nativeReady) {
-    return (
-      <Stack space={3}>
-        <Button
-          text="Back to cover preview"
-          mode="ghost"
-          tone="primary"
-          onClick={() => setShowNativeInput(false)}
-        />
-        {renderNativeInput()}
-      </Stack>
-    );
-  }
-
   return (
     <Stack space={3}>
-      <div
-        style={{
-          width: 140,
-          aspectRatio: "2 / 3",
-          flex: "0 0 auto",
-          background: "var(--card-muted-bg-color, rgba(0,0,0,0.04))",
-          borderRadius: 6,
-          overflow: "hidden",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          border: "1px solid var(--card-border-color, rgba(0,0,0,0.08))",
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={previewUrl}
-          alt=""
+      {!showNativeInput ? (
+        <>
+          <div
+            style={{
+              width: 140,
+              aspectRatio: "2 / 3",
+              flex: "0 0 auto",
+              background: "var(--card-muted-bg-color, rgba(0,0,0,0.04))",
+              borderRadius: 6,
+              overflow: "hidden",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid var(--card-border-color, rgba(0,0,0,0.08))",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt=""
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          </div>
+          <Button
+            text={nativeReady ? "Edit cover details" : "Preparing image tools..."}
+            mode="ghost"
+            tone="primary"
+            disabled={!nativeReady}
+            onClick={() => {
+              setHasOpenedNativeInput(true);
+              setShowNativeInput(true);
+            }}
+          />
+        </>
+      ) : null}
+
+      {hasOpenedNativeInput && nativeReady ? (
+        <div
           style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
+            display: showNativeInput ? "block" : "none",
           }}
-        />
-      </div>
-      <Stack space={2}>
-        <Button
-          text={nativeReady ? "Edit cover details" : "Preparing image tools..."}
-          mode="ghost"
-          tone="primary"
-          disabled={!nativeReady}
-          onClick={() => setShowNativeInput(true)}
-        />
+        >
+          <Stack space={3}>
+            <Button
+              text="Back to cover preview"
+              mode="ghost"
+              tone="primary"
+              onClick={() => setShowNativeInput(false)}
+            />
+            {renderNativeInput()}
+          </Stack>
+        </div>
+      ) : null}
+
+      {previewPending && !nativeReady ? (
         <Text muted size={1}>
-          {previewPending && !nativeReady
-            ? "Finalizing cover preview..."
-            : "Stable preview shown by default. Open image tools when you want to crop, replace, or edit alt text."}
+          Finalizing cover preview...
         </Text>
-      </Stack>
+      ) : null}
     </Stack>
   );
 }
