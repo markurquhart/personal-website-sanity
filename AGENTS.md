@@ -181,7 +181,7 @@ After any schema change, run:
 npm run schema:deploy
 ```
 
-The Studio at `/studio` will pick it up on next load. The frontend doesn't care about schema changes unless query shapes change.
+ The standalone Studio will pick it up on next load. The frontend doesn't care about schema changes unless query shapes change.
 
 # Migration scripts
 

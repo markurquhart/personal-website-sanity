@@ -47,7 +47,7 @@ export function PhotoSlider({ photos }: { photos: Photo[] }) {
   if (!photos.length) {
     return (
       <div className="flex h-[60vh] w-full items-center justify-center bg-[#f3f3f3] text-sm text-[#888] xl:h-[calc(100vh_-_84px)]">
-        No photos yet — upload via /studio
+        No photos yet — upload in Sanity Studio
       </div>
     );
   }

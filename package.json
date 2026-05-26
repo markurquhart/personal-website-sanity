@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "studio:dev": "sanity dev --port 3333",
+    "studio:build": "sanity build studio-static",
     "schema:deploy": "sanity schema deploy",
     "typegen": "sanity typegen generate"
   },

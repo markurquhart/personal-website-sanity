@@ -19,6 +19,8 @@
 
 # production
 /build
+/.sanity/
+/studio-static
 
 # misc
 .DS_Store

@@ -5,5 +5,5 @@ const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET;
 
 export default defineCliConfig({
   api: { projectId, dataset },
-  autoUpdates: true,
+  deployment: { autoUpdates: false },
 });

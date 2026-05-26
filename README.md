@@ -5,7 +5,7 @@ Personal site for [Mark Urquhart](https://markurquhart.com) — Next.js 16 + San
 ## Stack
 
 - **Framework:** Next.js 16 (App Router) + React 19
-- **CMS:** Sanity v5 (embedded Studio at `/studio`)
+- **CMS:** Sanity v5 (standalone Studio on `studio.markurquhart.com`)
 - **Styling:** Tailwind CSS v4
 - **Slider:** Swiper
 - **Hosting:** Vercel
@@ -20,7 +20,6 @@ src/
 │   ├── blog/
 │   │   ├── page.tsx              # Blog index (filters + sort + featured + grid)
 │   │   └── [slug]/page.tsx       # Post detail
-│   ├── studio/[[...tool]]/       # Embedded Sanity Studio
 │   └── layout.tsx                # Root layout + fonts + GTM
 ├── components/
 │   ├── PageShell.tsx             # Responsive shell (sidebar / mobile header)
@@ -31,7 +30,7 @@ src/
 │   ├── SocialIcon.tsx            # SVG icon registry
 │   └── GoogleTagManager.tsx      # GTM script + noscript
 └── sanity/
-    ├── env.ts                    # Project / dataset / API version
+    ├── env.ts                    # Project / dataset / API version + Studio URL
     ├── lib/
     │   ├── client.ts             # Sanity client
     │   ├── live.ts               # defineLive (sanityFetch, SanityLive)
@@ -48,9 +47,10 @@ src/
     │   └── objects/
     │       └── socialLink.ts     # Social link sub-object
     └── structure.ts              # Studio structure: Pages, Entries, Assets, Site Settings
-sanity.config.ts                  # Studio config
-sanity.cli.ts                     # CLI config (project id / dataset)
+sanity.config.ts                  # Standalone Studio config
+sanity.cli.ts                     # Studio CLI config (project id / dataset)
 scripts/                          # One-off migration + audit scripts
+docs/studio-subdomain.md          # Vercel + DNS setup for standalone Studio
 ```
 
 ## Content model
@@ -83,7 +83,10 @@ cp .env.local.example .env.local   # if you set one up; otherwise see "Env vars"
 # Start the dev server
 npm run dev
 # → http://localhost:3000
-# → http://localhost:3000/studio   (Sanity Studio)
+
+# Start Sanity Studio
+npm run studio:dev
+# → http://localhost:3333
 ```
 
 ### Env vars
@@ -96,6 +99,7 @@ Create a `.env.local` with the keys below. Values aren't checked in — grab the
 | `NEXT_PUBLIC_SANITY_DATASET` | yes | Sanity dataset name |
 | `NEXT_PUBLIC_SANITY_API_VERSION` | yes | Pin to today's date (e.g. `2026-05-21`) |
 | `SANITY_API_READ_TOKEN` | optional | Only needed for draft preview / authenticated reads |
+| `NEXT_PUBLIC_SANITY_STUDIO_URL` | optional | Public Studio URL. Defaults to `http://localhost:3333` in development and `https://studio.markurquhart.com` in production. |
 | `NEXT_PUBLIC_GTM_ID` | optional | Google Tag Manager ID. Leave unset locally so dev events don't fire; set in Vercel for production. |
 
 `.env*` files are gitignored — never commit them.
@@ -104,7 +108,7 @@ Create a `.env.local` with the keys below. Values aren't checked in — grab the
 
 ### Edit content
 
-Open `/studio` (locally or on the deployed URL), sign in with the Sanity account that owns the project.
+Open `http://localhost:3333` locally or `https://studio.markurquhart.com` in production, then sign in with the Sanity account that owns the project.
 
 ### Add a new asset or entry type
 
@@ -121,6 +125,14 @@ npm run schema:deploy
 ```
 
 This uploads the schema to the Sanity Content Lake so the MCP tools and validation know about it.
+
+### Build the standalone Studio
+
+```bash
+npm run studio:build
+```
+
+This outputs a static Studio build into `studio-static/` for a dedicated Vercel project.
 
 ### Generate TypeScript types (not yet wired)
 
@@ -151,12 +163,34 @@ The `lg:` breakpoint was deliberately swapped for `xl:` (1280px) — the sidebar
 
 ## Deploy
 
-Vercel auto-deploys from `main`. Build command is the default `next build` — no custom config needed.
+### Public site
+
+Vercel auto-deploys from `main`. Build command is the default `next build`.
 
 After deploying:
 
 1. Add the production URL to **Sanity CORS** (`https://sanity.io/manage` → API → CORS)
 2. Custom domain via **Vercel** → Settings → Domains → `markurquhart.com`
+
+### Standalone Studio
+
+Create a second Vercel project from the same repo with:
+
+1. **Framework preset:** Other
+2. **Root directory:** repo root
+3. **Build command:** `npm run studio:build`
+4. **Output directory:** `studio-static`
+5. **Install command:** `npm install`
+6. **Domain:** `studio.markurquhart.com`
+
+Then:
+
+1. Add `https://studio.markurquhart.com` to **Sanity CORS**
+2. Set `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`, and `NEXT_PUBLIC_SANITY_API_VERSION` in the Studio Vercel project
+3. Set `NEXT_PUBLIC_SANITY_STUDIO_URL=https://studio.markurquhart.com` in the public-site Vercel project
+4. Verify that `/studio` on the public site redirects to the new subdomain
+
+See [`docs/studio-subdomain.md`](./docs/studio-subdomain.md) for the full cutover checklist.
 
 ## Working on this codebase
 
