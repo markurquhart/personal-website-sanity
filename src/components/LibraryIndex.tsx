@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { BookListItem } from "@/components/BookListItem";
+import { FilterPill } from "@/components/FilterPill";
 import type { BookStatus, BookSummary } from "@/sanity/lib/types";
 
 type FocusKey = BookStatus | "all";
@@ -90,41 +91,6 @@ function matchesSearch(book: BookSummary, query: string) {
   return haystack.includes(query);
 }
 
-function FocusButton({
-  active,
-  onClick,
-  label,
-  count,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  count: number;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`cursor-pointer rounded-full border px-[14px] py-[6px] text-[13px] font-medium transition-all duration-200 ${
-        active
-          ? "border-[#333] bg-[#333] text-white"
-          : "border-[#ddd] bg-white text-[#666] hover:border-[#333] hover:text-[#333]"
-      }`}
-    >
-      <span className="flex items-center gap-2">
-        <span>{label}</span>
-        <span
-          className={`rounded-full px-2 py-[2px] text-[11px] leading-none ${
-            active ? "bg-white/18 text-white" : "bg-[#f4f3ef] text-[#888]"
-          }`}
-        >
-          {count}
-        </span>
-      </span>
-    </button>
-  );
-}
-
 function LibraryHeader() {
   return (
     <header className="flex flex-col gap-3">
@@ -162,7 +128,7 @@ function FilterPanel({
     <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e5e5e5] pb-3">
       <div className="flex flex-wrap gap-2">
         {FOCUS_OPTIONS.map((option) => (
-          <FocusButton
+          <FilterPill
             key={option.value}
             active={focus === option.value}
             onClick={() => onFocusChange(option.value)}

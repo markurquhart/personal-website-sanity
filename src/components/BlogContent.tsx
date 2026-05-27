@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { FilterPill } from "@/components/FilterPill";
 import { urlFor } from "@/sanity/lib/image";
 import type { PostSummary } from "@/sanity/lib/types";
 
@@ -13,41 +14,6 @@ const CATEGORIES = [
   "Integrations",
   "Software",
 ] as const;
-
-function Pill({
-  active,
-  onClick,
-  label,
-  count,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  count: number;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`cursor-pointer rounded-full border px-[14px] py-[6px] text-[13px] font-medium transition-all duration-200 ${
-        active
-          ? "border-[#333] bg-[#333] text-white"
-          : "border-[#ddd] bg-white text-[#666] hover:border-[#333] hover:text-[#333]"
-      }`}
-    >
-      <span className="flex items-center gap-2">
-        <span>{label}</span>
-        <span
-          className={`rounded-full px-2 py-[2px] text-[11px] leading-none ${
-            active ? "bg-white/18 text-white" : "bg-[#f4f3ef] text-[#888]"
-          }`}
-        >
-          {count}
-        </span>
-      </span>
-    </button>
-  );
-}
 
 function formatDate(iso?: string | null) {
   if (!iso) return "";
@@ -184,14 +150,14 @@ export function BlogContent({ posts }: { posts: PostSummary[] }) {
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e5e5e5] pb-3">
         <div className="flex flex-wrap gap-2">
-          <Pill
+          <FilterPill
             active={category === "all"}
             onClick={() => setCategory("all")}
             label="All"
             count={categoryCounts.all || 0}
           />
           {CATEGORIES.map((c) => (
-            <Pill
+            <FilterPill
               key={c}
               active={category === c}
               onClick={() => setCategory(c)}
