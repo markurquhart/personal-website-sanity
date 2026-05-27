@@ -4,10 +4,10 @@ import { defineArrayMember, defineField, defineType } from "sanity";
 import { BookCoverInput } from "../../components/BookCoverInput";
 
 export const BOOK_STATUSES = [
-  { title: "Up Next", value: "up-next" },
+  { title: "Next", value: "up-next" },
   { title: "Currently Reading", value: "currently-reading" },
   { title: "Completed", value: "completed" },
-  { title: "Paused", value: "paused" },
+  { title: "TBR", value: "paused" },
 ] as const;
 
 // Fiction vs. Non-Fiction lives on its own `kind` field — every book is

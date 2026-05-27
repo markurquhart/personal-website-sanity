@@ -14,26 +14,26 @@ const FOCUS_OPTIONS: { label: string; value: FocusKey; emptyText: string }[] = [
     value: "currently-reading",
     emptyText: "Nothing in progress.",
   },
-  { label: "Up Next", value: "up-next", emptyText: "Nothing queued." },
+  { label: "Next", value: "up-next", emptyText: "Nothing queued." },
   {
     label: "Completed",
     value: "completed",
     emptyText: "No completed books yet.",
   },
-  { label: "Paused", value: "paused", emptyText: "Nothing paused." },
+  { label: "TBR", value: "paused", emptyText: "Nothing on TBR." },
 ];
 
 const SECTION_LABEL: Record<BookStatus, string> = {
   "currently-reading": "Currently Reading",
-  "up-next": "Up Next",
-  paused: "Paused",
+  "up-next": "Next",
+  paused: "TBR",
   completed: "Completed",
 };
 
 const SECTION_DESCRIPTION: Record<BookStatus, string> = {
   "currently-reading": "The books I am actively spending time with right now.",
   "up-next": "The next stack on deck once I finish the current read.",
-  paused: "Books I set aside for now, but plan to revisit.",
+  paused: "The to-be-read pile — books set aside for now, but still on the list.",
   completed: "The finished shelf, with ratings and finish dates for quick browsing.",
 };
 

@@ -44,10 +44,10 @@ export async function generateMetadata({
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  "up-next": "Up Next",
+  "up-next": "Next",
   "currently-reading": "Currently Reading",
   completed: "Completed",
-  paused: "Paused",
+  paused: "TBR",
 };
 
 // Empty-state copy for the Notes card varies by status so an Up Next
@@ -57,7 +57,7 @@ function getNotesEmptyMessage(status: string | null | undefined): string {
     case "currently-reading":
       return "No notes yet — still reading.";
     case "paused":
-      return "Paused mid-read. No notes captured.";
+      return "On TBR. No notes captured.";
     case "up-next":
       return "Haven't started this one yet.";
     case "completed":
@@ -197,7 +197,7 @@ export default async function BookPage({
     if (book.status === "currently-reading" && book.startedAt)
       return `Started ${formatDate(book.startedAt)}`;
     if (book.status === "paused" && book.pausedAt)
-      return `Paused ${formatDate(book.pausedAt)}`;
+      return `TBR since ${formatDate(book.pausedAt)}`;
     if (book.addedAt) return `Added ${formatDate(book.addedAt)}`;
     return null;
   })();

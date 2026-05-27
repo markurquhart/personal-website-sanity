@@ -14,9 +14,9 @@ function formatDate(iso?: string | null) {
 
 function statusLabel(status?: BookStatus | null) {
   if (status === "currently-reading") return "Currently Reading";
-  if (status === "up-next") return "Up Next";
+  if (status === "up-next") return "Next";
   if (status === "completed") return "Completed";
-  if (status === "paused") return "Paused";
+  if (status === "paused") return "TBR";
   return null;
 }
 
@@ -34,7 +34,7 @@ function dateLine(book: BookSummary) {
     return `Started ${formatDate(book.startedAt)}`;
   }
   if (book.status === "paused" && book.pausedAt) {
-    return `Paused ${formatDate(book.pausedAt)}`;
+    return `TBR since ${formatDate(book.pausedAt)}`;
   }
   if (book.addedAt) {
     return `Added ${formatDate(book.addedAt)}`;
