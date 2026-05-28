@@ -187,7 +187,20 @@ async function main() {
       asset: { _type: "reference", _ref: avatarAsset._id },
       alt: "Mark Urquhart",
     },
-    socials: SOCIALS.map((s, i) => ({ _key: `s${i}`, ...s })),
+    navigation: {
+      pages: [],
+      professional: SOCIALS.filter((s) => s.group === "professional").map(
+        (s, i) => ({ _key: `p${i}`, ...(({ group, ...rest }) => rest)(s) }),
+      ),
+      social: SOCIALS.filter((s) => s.group === "social").map((s, i) => ({
+        _key: `s${i}`,
+        ...(({ group, ...rest }) => rest)(s),
+      })),
+      lifestyle: SOCIALS.filter((s) => s.group === "lifestyle").map((s, i) => ({
+        _key: `l${i}`,
+        ...(({ group, ...rest }) => rest)(s),
+      })),
+    },
   });
 
   console.log("✓ Done");

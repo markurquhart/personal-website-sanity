@@ -13,6 +13,7 @@
     "typegen": "sanity typegen generate"
   },
   "dependencies": {
+    "@iconify/react": "^6.0.2",
     "@portabletext/react": "^6.2.0",
     "@sanity/client": "^7.22.0",
     "@sanity/image-url": "^2.1.1",
@@ -22,6 +23,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "sanity": "^5.26.0",
+    "sanity-plugin-iconify": "^3.0.0",
     "styled-components": "^6.4.2",
     "swiper": "^12.1.4"
   },

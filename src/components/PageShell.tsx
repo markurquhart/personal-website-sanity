@@ -3,6 +3,7 @@ import { MobileNav } from "@/components/MobileNav";
 import { MobileProfileInline } from "@/components/MobileShell";
 import { sanityFetch } from "@/sanity/lib/live";
 import { SHELL_QUERY } from "@/sanity/lib/queries";
+import { flattenNavigation } from "@/lib/navLink";
 import type { HomePage, SiteSettings } from "@/sanity/lib/types";
 
 export async function PageShell({
@@ -16,6 +17,7 @@ export async function PageShell({
   const settings = (data as { settings?: SiteSettings | null })?.settings ?? null;
   const home = (data as { home?: HomePage | null })?.home ?? null;
   const intro = home?.intro ?? null;
+  const navLinks = flattenNavigation(settings?.navigation);
 
   return (
     <>
@@ -29,7 +31,7 @@ export async function PageShell({
       <div className="flex min-h-screen w-full flex-col xl:flex-row xl:items-start xl:gap-[48px] xl:px-[42px] xl:py-[42px]">
         <MobileNav
           title={settings?.title}
-          socials={settings?.socials}
+          socials={navLinks}
           footerText={settings?.footerText}
           position="top"
         />
@@ -37,7 +39,7 @@ export async function PageShell({
           title={settings?.title}
           bio={intro}
           avatar={settings?.avatar}
-          socials={settings?.socials}
+          socials={navLinks}
           footerText={settings?.footerText}
         />
         <main className="w-full xl:w-auto xl:min-w-0 xl:flex-1 xl:pl-[42px]">
@@ -48,7 +50,7 @@ export async function PageShell({
         </main>
         <MobileNav
           title={settings?.title}
-          socials={settings?.socials}
+          socials={navLinks}
           footerText={settings?.footerText}
           position="bottom"
         />

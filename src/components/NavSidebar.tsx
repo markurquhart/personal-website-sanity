@@ -5,15 +5,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import {
+  groupNavLinks,
+  isExternalNavUrl,
+  isNavLinkActive,
+  navGroupLabel,
+  NAV_SIDEBAR_GROUPS,
+} from "@/lib/navLink";
 import { urlFor } from "@/sanity/lib/image";
-import type { SanityImageAsset, SocialLink } from "@/sanity/lib/types";
+import type { NavGroup, SanityImageAsset, SocialLink } from "@/sanity/lib/types";
 
 import { ArrowIcon, SocialIcon } from "./SocialIcon";
 
 const RED = "#c0392b";
 const DARK = "hsla(0,0%,25%,1)";
 
-type GroupKey = "pages" | "professional" | "social" | "lifestyle";
+type GroupKey = NavGroup;
 
 const Chevron = ({ open }: { open: boolean }) => (
   <svg
@@ -80,7 +87,8 @@ function RowItem({
     <>
       <SocialIcon
         name={icon}
-        className="h-[18px] w-[18px] flex-shrink-0 text-[#4d4d4d] transition-[filter] duration-200 group-hover:[filter:brightness(0.4)]"
+        size={18}
+        className="text-[#4d4d4d] transition-[filter] duration-200 group-hover:[filter:brightness(0.4)]"
       />
       <span
         className="w-[85%] text-[14px] font-normal leading-[1.5em]"
@@ -136,7 +144,8 @@ function IconItem({
   const inner = (
     <SocialIcon
       name={icon}
-      className="h-[18px] w-[18px] text-[#4d4d4d] transition-colors"
+      size={18}
+      className="text-[#4d4d4d] transition-colors"
     />
   );
   const className =
@@ -185,15 +194,7 @@ export function NavSidebar({
   footerText?: string | null;
 }) {
   const pathname = usePathname();
-  const links = socials ?? [];
-  const grouped = useMemo(
-    () => ({
-      professional: links.filter((s) => s.group === "professional"),
-      social: links.filter((s) => s.group === "social"),
-      lifestyle: links.filter((s) => s.group === "lifestyle"),
-    }),
-    [links],
-  );
+  const grouped = useMemo(() => groupNavLinks(socials ?? []), [socials]);
 
   const isHome = pathname === "/";
 
@@ -244,71 +245,51 @@ export function NavSidebar({
           <span className="w-[85%] leading-[1.5em]">Home</span>
         </Link>
 
-        <div>
-          <GroupHeader
-            title="Professional"
-            open={openGroup === "professional"}
-            active={false}
-            onToggle={() => toggle("professional")}
-          />
-          {openGroup === "professional" && (
-            <div className="flex flex-row items-center gap-3 px-[5px] py-3">
-              {grouped.professional.map((s) => (
-                <IconItem
-                  key={s.url}
-                  href={s.url}
-                  label={s.label}
-                  icon={s.icon}
-                  external
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {NAV_SIDEBAR_GROUPS.map((groupKey) => {
+          const items = grouped[groupKey];
+          if (items.length === 0) return null;
 
-        <div>
-          <GroupHeader
-            title="Social"
-            open={openGroup === "social"}
-            active={false}
-            onToggle={() => toggle("social")}
-          />
-          {openGroup === "social" && (
-            <div className="flex flex-row items-center gap-3 px-[5px] py-3">
-              {grouped.social.map((s) => (
-                <IconItem
-                  key={s.url}
-                  href={s.url}
-                  label={s.label}
-                  icon={s.icon}
-                  external={!s.url.startsWith("mailto:")}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+          const isPages = groupKey === "pages";
+          const groupActive = items.some((s) =>
+            isNavLinkActive(pathname, s.url),
+          );
 
-        <div>
-          <GroupHeader
-            title="Lifestyle"
-            open={openGroup === "lifestyle"}
-            active={false}
-            onToggle={() => toggle("lifestyle")}
-          />
-          {openGroup === "lifestyle" && (
-            <div className="flex flex-row items-center gap-3 px-[5px] py-3">
-              {grouped.lifestyle.map((s) => (
-                <IconItem
-                  key={s.url}
-                  href={s.url}
-                  label={s.label}
-                  icon={s.icon}
-                  external
-                />
-              ))}
+          return (
+            <div key={groupKey}>
+              <GroupHeader
+                title={navGroupLabel(groupKey)}
+                open={openGroup === groupKey}
+                active={groupActive}
+                onToggle={() => toggle(groupKey)}
+              />
+              {openGroup === groupKey &&
+                (isPages ? (
+                  items.map((s) => (
+                    <RowItem
+                      key={s.url}
+                      href={s.url}
+                      label={s.label}
+                      icon={s.icon}
+                      external={isExternalNavUrl(s.url)}
+                      active={isNavLinkActive(pathname, s.url)}
+                    />
+                  ))
+                ) : (
+                  <div className="flex flex-row items-center gap-3 px-[5px] py-3">
+                    {items.map((s) => (
+                      <IconItem
+                        key={s.url}
+                        href={s.url}
+                        label={s.label}
+                        icon={s.icon}
+                        external={isExternalNavUrl(s.url)}
+                      />
+                    ))}
+                  </div>
+                ))}
             </div>
-          )}
-        </div>
+          );
+        })}
       </div>
 
       <div className="mt-auto pt-4">

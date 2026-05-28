@@ -1,18 +1,10 @@
 import Link from "next/link";
 
-type SocialLink = {
-  label: string;
-  url: string;
-  group: "professional" | "social" | "lifestyle";
-};
+import type { SocialLink } from "@/sanity/lib/types";
+import { groupNavLinks } from "@/lib/navLink";
 
 export function Header({ socials = [] }: { socials?: SocialLink[] | null }) {
-  const links = socials ?? [];
-  const grouped = {
-    professional: links.filter((s) => s.group === "professional"),
-    social: links.filter((s) => s.group === "social"),
-    lifestyle: links.filter((s) => s.group === "lifestyle"),
-  };
+  const grouped = groupNavLinks(socials ?? []);
 
   return (
     <header className="border-b border-black/10 dark:border-white/10">
@@ -26,7 +18,7 @@ export function Header({ socials = [] }: { socials?: SocialLink[] | null }) {
           </Link>
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-black/60 dark:text-white/60">
-          {(["professional", "social", "lifestyle"] as const).map((g) => (
+          {(["pages", "professional", "social", "lifestyle"] as const).map((g) => (
             <div key={g} className="flex gap-x-3">
               {grouped[g].map((s) => (
                 <a

@@ -5,8 +5,15 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 
+import {
+  groupNavLinks,
+  isExternalNavUrl,
+  isNavLinkActive,
+  navGroupLabel,
+  NAV_SIDEBAR_GROUPS,
+} from "@/lib/navLink";
 import { urlFor } from "@/sanity/lib/image";
-import type { SanityImageAsset, SocialLink } from "@/sanity/lib/types";
+import type { NavGroup, SanityImageAsset, SocialLink } from "@/sanity/lib/types";
 
 import { ArrowIcon, SocialIcon } from "./SocialIcon";
 
@@ -154,18 +161,9 @@ export function MobileSidebar({
 }) {
   const pathname = usePathname();
   const isHome = pathname === "/";
-  const links = socials ?? [];
-  const grouped = useMemo(
-    () => ({
-      professional: links.filter((s) => s.group === "professional"),
-      social: links.filter((s) => s.group === "social"),
-      lifestyle: links.filter((s) => s.group === "lifestyle"),
-    }),
-    [links],
-  );
+  const grouped = useMemo(() => groupNavLinks(socials ?? []), [socials]);
 
-  type GK = "professional" | "social" | "lifestyle" | null;
-  const [openGroup, setOpenGroup] = useState<GK>(null);
+  const [openGroup, setOpenGroup] = useState<NavGroup | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -213,45 +211,122 @@ export function MobileSidebar({
             <span>Home</span>
           </Link>
 
-          {(["professional", "social", "lifestyle"] as const).map((g) => {
+          {NAV_SIDEBAR_GROUPS.map((g) => {
             const items = grouped[g];
-            const label =
-              g === "professional"
-                ? "Professional"
-                : g === "social"
-                  ? "Social"
-                  : "Lifestyle";
+            if (items.length === 0) return null;
+
             const isOpen = openGroup === g;
+            const isPages = g === "pages";
+            const groupActive = items.some((s) =>
+              isNavLinkActive(pathname, s.url),
+            );
+
             return (
               <div key={g}>
                 <button
                   type="button"
                   onClick={() => setOpenGroup(isOpen ? null : g)}
-                  className="flex w-full cursor-pointer items-center justify-between border-b border-[#ececec] py-[14px] text-left text-[13px] font-semibold uppercase tracking-[0.06em] text-[#737373] transition-colors hover:text-[#404040]"
+                  className="flex w-full cursor-pointer items-center justify-between border-b border-[#ececec] py-[14px] text-left text-[13px] font-semibold uppercase tracking-[0.06em] transition-colors hover:text-[#404040]"
+                  style={{
+                    color: groupActive ? RED : "#737373",
+                  }}
                 >
-                  <span>{label}</span>
+                  <span>{navGroupLabel(g)}</span>
                   <Chevron open={isOpen} />
                 </button>
-                {isOpen && (
-                  <div className="flex flex-row flex-wrap items-center gap-3 py-4">
-                    {items.map((s) => (
-                      <a
-                        key={s.url}
-                        href={s.url}
-                        target={s.url.startsWith("mailto:") ? undefined : "_blank"}
-                        rel="noreferrer noopener"
-                        onClick={onClose}
-                        aria-label={s.label}
-                        title={s.label}
-                        data-track="nav-link"
-                        data-track-label={s.label}
-                        className="flex h-11 w-11 items-center justify-center rounded-md border border-[#dbdbdb] text-[#737373] transition-colors hover:border-[#1a1a1a] hover:text-[#1a1a1a]"
-                      >
-                        <SocialIcon name={s.icon} className="h-5 w-5" />
-                      </a>
-                    ))}
-                  </div>
-                )}
+                {isOpen &&
+                  (isPages ? (
+                    items.map((s) => {
+                      const active = isNavLinkActive(pathname, s.url);
+                      const external = isExternalNavUrl(s.url);
+                      const rowClass =
+                        "group flex items-center gap-[17px] border-b border-[#ececec] py-[14px] pl-[5px] no-underline transition-colors";
+                      const inner = (
+                        <>
+                          <SocialIcon
+                            name={s.icon}
+                            size={18}
+                            className="text-[#4d4d4d]"
+                          />
+                          <span
+                            className="flex-1 text-[14px] font-normal leading-[1.5em]"
+                            style={{ color: active ? RED : "#737373" }}
+                          >
+                            {s.label}
+                          </span>
+                          <ArrowIcon className="h-4 w-4 flex-shrink-0 text-[#4d4d4d]" />
+                        </>
+                      );
+                      return external ? (
+                        <a
+                          key={s.url}
+                          href={s.url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          onClick={onClose}
+                          className={rowClass}
+                          data-track="nav-link"
+                          data-track-label={s.label}
+                        >
+                          {inner}
+                        </a>
+                      ) : (
+                        <Link
+                          key={s.url}
+                          href={s.url}
+                          onClick={onClose}
+                          className={rowClass}
+                          data-track="nav-link"
+                          data-track-label={s.label}
+                        >
+                          {inner}
+                        </Link>
+                      );
+                    })
+                  ) : (
+                    <div className="flex flex-row flex-wrap items-center gap-3 py-4">
+                      {items.map((s) => {
+                        const external = isExternalNavUrl(s.url);
+                        const icon = (
+                          <SocialIcon
+                            name={s.icon}
+                            size={20}
+                          />
+                        );
+                        const className =
+                          "flex h-11 w-11 items-center justify-center rounded-md border border-[#dbdbdb] text-[#737373] transition-colors hover:border-[#1a1a1a] hover:text-[#1a1a1a]";
+                        return external ? (
+                          <a
+                            key={s.url}
+                            href={s.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            onClick={onClose}
+                            aria-label={s.label}
+                            title={s.label}
+                            data-track="nav-link"
+                            data-track-label={s.label}
+                            className={className}
+                          >
+                            {icon}
+                          </a>
+                        ) : (
+                          <Link
+                            key={s.url}
+                            href={s.url}
+                            onClick={onClose}
+                            aria-label={s.label}
+                            title={s.label}
+                            data-track="nav-link"
+                            data-track-label={s.label}
+                            className={className}
+                          >
+                            {icon}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ))}
               </div>
             );
           })}

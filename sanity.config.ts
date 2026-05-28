@@ -1,5 +1,6 @@
 import { visionTool } from "@sanity/vision";
 import { defineConfig } from "sanity";
+import { iconify } from "sanity-plugin-iconify";
 import { structureTool } from "sanity/structure";
 
 import { BookImportAction } from "./src/sanity/components/BookImportAction";
@@ -23,6 +24,10 @@ export default defineConfig({
   },
   plugins: [
     structureTool({ structure }),
+    iconify({
+      showName: true,
+      // Empty = full Iconify catalog (Simple Icons, Lucide, MDI, etc.)
+    }),
     visionTool({ defaultApiVersion: studioApiVersion }),
   ],
 });

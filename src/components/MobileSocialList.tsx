@@ -23,7 +23,8 @@ export function MobileSocialList({
           >
             <SocialIcon
               name={s.icon}
-              className="h-[20px] w-[20px] flex-shrink-0 text-[#333]"
+              size={20}
+              className="text-[#333]"
             />
             <div className="w-[85%] text-[16px] font-normal leading-[1.5em] text-[#525252] transition-colors duration-200 group-hover:text-[#8f0000]">
               {s.label}

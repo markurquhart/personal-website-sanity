@@ -12,11 +12,24 @@ export type SanityImageAsset = {
   crop?: unknown;
 };
 
-export type SocialLink = {
+export type NavGroup = "pages" | "professional" | "social" | "lifestyle";
+
+export type NavLinkItem = {
   label: string;
   url: string;
-  group: "professional" | "social" | "lifestyle";
   icon: string;
+};
+
+/** Flat link with group — used by nav UI components. */
+export type SocialLink = NavLinkItem & {
+  group: NavGroup;
+};
+
+export type SiteNavigation = {
+  pages?: NavLinkItem[] | null;
+  professional?: NavLinkItem[] | null;
+  social?: NavLinkItem[] | null;
+  lifestyle?: NavLinkItem[] | null;
 };
 
 export type SiteSettings = {
@@ -24,7 +37,7 @@ export type SiteSettings = {
   tagline?: string | null;
   footerText?: string | null;
   avatar?: SanityImageAsset | null;
-  socials?: SocialLink[] | null;
+  navigation?: SiteNavigation | null;
 };
 
 export type HomePage = {

@@ -1,5 +1,7 @@
 import { defineQuery } from "next-sanity";
 
+import { SITE_NAVIGATION_GROQ } from "./navQuery";
+
 export const SITE_SETTINGS_QUERY = defineQuery(`
   *[_type == "siteSettings"][0]{
     title,
@@ -9,7 +11,7 @@ export const SITE_SETTINGS_QUERY = defineQuery(`
       asset->{ _id, url, metadata { lqip, dimensions } },
       alt
     },
-    socials[]{ label, url, group, icon }
+    "navigation": ${SITE_NAVIGATION_GROQ}
   }
 `);
 
@@ -23,7 +25,7 @@ export const SHELL_QUERY = defineQuery(`{
       asset->{ _id, url, metadata { lqip, dimensions } },
       alt
     },
-    socials[]{ label, url, group, icon }
+    "navigation": ${SITE_NAVIGATION_GROQ}
   },
   "home": *[_type == "homePage"][0]{
     intro
