@@ -106,31 +106,15 @@ export default async function TripPage({
 
   return (
     <PageShell hideMobileProfile>
-      <article className="flex flex-col gap-10 pt-[22px] pb-[60px]">
-        <div className="px-5 xl:px-0">
-          <Link
-            href="/travel"
-            className="inline-flex items-center gap-2 text-[14px] font-medium text-[#737373] no-underline transition-colors hover:text-[#1a1a1a]"
-          >
-            ← Back to Travel
-          </Link>
-        </div>
+      <article className="flex flex-col gap-8 px-5 pt-[22px] pb-[60px] xl:px-0">
+        <Link
+          href="/travel"
+          className="inline-flex items-center gap-2 text-[14px] font-medium text-[#737373] no-underline transition-colors hover:text-[#1a1a1a]"
+        >
+          ← Back to Travel
+        </Link>
 
-        {coverUrl && (
-          <div
-            className="relative w-full overflow-hidden xl:rounded-[14px]"
-            style={{ aspectRatio: "16 / 9" }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={coverUrl}
-              alt={trip.cover?.alt || trip.title || ""}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-          </div>
-        )}
-
-        <header className="flex flex-col gap-4 px-5 xl:px-0">
+        <header className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <CategoryBadge category={category} />
             {where && (
@@ -145,8 +129,17 @@ export default async function TripPage({
           {range && <div className="text-[14px] text-[#888]">{range}</div>}
         </header>
 
+        {coverUrl && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={coverUrl}
+            alt={trip.cover?.alt || trip.title || ""}
+            className="h-[280px] w-full rounded-lg object-cover md:h-[400px]"
+          />
+        )}
+
         {trip.summary && (
-          <section className="px-5 xl:px-0">
+          <section>
             <p className="m-0 max-w-[44rem] text-[17px] leading-[1.7] text-[#404040]">
               {trip.summary}
             </p>
@@ -154,7 +147,7 @@ export default async function TripPage({
         )}
 
         {trip.body?.length ? (
-          <section className="flex flex-col gap-4 px-5 xl:px-0">
+          <section className="flex flex-col gap-4">
             <h2 className={LABEL_CLASS}>Trip log</h2>
             <div className="max-w-[44rem]">
               <PortableText value={trip.body} components={bodyBlocks} />
@@ -163,21 +156,21 @@ export default async function TripPage({
         ) : null}
 
         {trip.location && (
-          <section className="flex flex-col gap-4 px-5 xl:px-0">
+          <section className="flex flex-col gap-4">
             <h2 className={LABEL_CLASS}>On the map</h2>
             <TravelMap trips={[trip]} />
           </section>
         )}
 
         {trip.photos?.length ? (
-          <section className="flex flex-col gap-4 px-5 xl:px-0">
+          <section className="flex flex-col gap-4">
             <h2 className={LABEL_CLASS}>Photos</h2>
             <TripPhotoGallery photos={trip.photos} />
           </section>
         ) : null}
 
         {trip.relatedPosts?.length ? (
-          <section className="flex flex-col gap-4 px-5 xl:px-0">
+          <section className="flex flex-col gap-4">
             <h2 className={LABEL_CLASS}>Related writing</h2>
             <ul className="m-0 flex flex-col gap-3 p-0">
               {trip.relatedPosts.map((post) => (
@@ -205,7 +198,7 @@ export default async function TripPage({
         ) : null}
 
         {trip.externalLinks?.length ? (
-          <section className="flex flex-col gap-3 px-5 xl:px-0">
+          <section className="flex flex-col gap-3">
             <h2 className={LABEL_CLASS}>Links</h2>
             <ul className="m-0 flex flex-wrap gap-x-4 gap-y-2 p-0">
               {trip.externalLinks.map((l) => (

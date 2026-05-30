@@ -278,6 +278,12 @@ export function TravelMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onBoundsChangeRef = useRef(onBoundsChange);
   onBoundsChangeRef.current = onBoundsChange;
+  // Captured after the initial fit so the reset button can return there.
+  const homeViewRef = useRef<{
+    center: [number, number];
+    zoom: number;
+  } | null>(null);
+  const resetButtonRef = useRef<HTMLButtonElement | null>(null);
   const router = useRouter();
 
   const pins = trips.filter(
@@ -500,7 +506,7 @@ export function TravelMap({
         paint: { "circle-opacity": 0, "circle-radius": 1 },
       });
 
-      // Bounds fit
+      // Bounds fit + capture as home view for the reset button.
       const bounds = new maplibregl.LngLatBounds();
       pins.forEach((trip) => {
         const { lng, lat } = trip.location!;
@@ -512,6 +518,11 @@ export function TravelMap({
       } else {
         map.fitBounds(bounds, { padding: 60, maxZoom: 6, duration: 0 });
       }
+      const c = map.getCenter();
+      homeViewRef.current = {
+        center: [c.lng, c.lat],
+        zoom: map.getZoom(),
+      };
 
       // Marker render lifecycle
       const reportBounds = () => {
@@ -524,9 +535,25 @@ export function TravelMap({
           west: b.getWest(),
         });
       };
+      const updateResetVisibility = () => {
+        const home = homeViewRef.current;
+        const btn = resetButtonRef.current;
+        if (!home || !btn) return;
+        const c = map.getCenter();
+        const dLng = Math.abs(c.lng - home.center[0]);
+        const dLat = Math.abs(c.lat - home.center[1]);
+        const dZoom = Math.abs(map.getZoom() - home.zoom);
+        // Tolerances chosen to ignore tiny float drift but trigger on
+        // any real pan or zoom.
+        const moved = dLng > 0.001 || dLat > 0.001 || dZoom > 0.05;
+        btn.style.opacity = moved ? "1" : "0";
+        btn.style.pointerEvents = moved ? "auto" : "none";
+        btn.style.transform = moved ? "translateY(0)" : "translateY(-4px)";
+      };
       map.on("moveend", () => {
         updateMarkers();
         reportBounds();
+        updateResetVisibility();
       });
       map.on("sourcedata", (e) => {
         if (e.sourceId === SOURCE_ID && map.isSourceLoaded(SOURCE_ID)) {
@@ -548,11 +575,53 @@ export function TravelMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trips]);
 
+  const handleReset = () => {
+    const home = homeViewRef.current;
+    const map = mapRef.current;
+    if (!home || !map) return;
+    map.easeTo({
+      center: home.center,
+      zoom: home.zoom,
+      duration: 600,
+    });
+  };
+
   return (
-    <div
-      ref={containerRef}
-      data-track="travel-map"
-      className="h-[360px] w-full overflow-hidden rounded-[12px] border border-[#ebebeb] bg-[#fafafa] xl:h-[460px]"
-    />
+    <div className="relative">
+      <div
+        ref={containerRef}
+        data-track="travel-map"
+        className="h-[360px] w-full overflow-hidden rounded-[12px] border border-[#ebebeb] bg-[#fafafa] xl:h-[460px]"
+      />
+      <button
+        ref={resetButtonRef}
+        type="button"
+        onClick={handleReset}
+        data-track="travel-map-reset"
+        aria-label="Reset map view"
+        className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-[#ebebeb] bg-white/95 px-3 py-1.5 text-[12px] font-medium text-[#1a1a1a] shadow-[0_4px_12px_-6px_rgba(15,23,42,0.2)] backdrop-blur-sm transition-all duration-200 hover:bg-white hover:shadow-[0_6px_16px_-6px_rgba(15,23,42,0.28)]"
+        style={{
+          opacity: 0,
+          pointerEvents: "none",
+          transform: "translateY(-4px)",
+        }}
+      >
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3 12a9 9 0 1 0 3-6.7" />
+          <path d="M3 4v5h5" />
+        </svg>
+        <span>Reset view</span>
+      </button>
+    </div>
   );
 }
