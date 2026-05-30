@@ -1,201 +1,197 @@
 # markurquhart.com
 
-Personal site for [Mark Urquhart](https://markurquhart.com) — Next.js 16 + Sanity v5, deployed on Vercel. Migrated from Webflow.
+Personal site for [Mark Urquhart](https://markurquhart.com) — a reading log, an interactive travel map, a blog, and a photo slider, all self-managed through a headless CMS.
 
-## Stack
+- **Live site:** https://markurquhart.com
+- **CMS Studio:** https://studio.markurquhart.com
 
-- **Framework:** Next.js 16 (App Router) + React 19
-- **CMS:** Sanity v5 (standalone Studio on `studio.markurquhart.com`)
-- **Styling:** Tailwind CSS v4
-- **Slider:** Swiper
-- **Hosting:** Vercel
-- **Analytics:** Google Tag Manager (opt-in via env var)
+---
 
-## Project layout
+## For visitors
 
-```
-src/
-├── app/
-│   ├── page.tsx                  # Home (hero slider)
-│   ├── blog/
-│   │   ├── page.tsx              # Blog index (filters + sort + featured + grid)
-│   │   └── [slug]/page.tsx       # Post detail
-│   └── layout.tsx                # Root layout + fonts + GTM
-├── components/
-│   ├── PageShell.tsx             # Responsive shell (sidebar / mobile header)
-│   ├── NavSidebar.tsx            # Desktop sidebar (≥ 1280px)
-│   ├── MobileShell.tsx           # Mobile header, footer, slide-in nav
-│   ├── PhotoSlider.tsx           # Home slider (Swiper)
-│   ├── BlogContent.tsx           # Blog index UI + filter/sort state
-│   ├── SocialIcon.tsx            # SVG icon registry
-│   └── GoogleTagManager.tsx      # GTM script + noscript
-└── sanity/
-    ├── env.ts                    # Project / dataset / API version + Studio URL
-    ├── lib/
-    │   ├── client.ts             # Sanity client
-    │   ├── live.ts               # defineLive (sanityFetch, SanityLive)
-    │   ├── image.ts              # Image URL builder
-    │   ├── queries.ts            # All GROQ queries
-    │   └── types.ts              # Hand-typed shapes (no typegen yet)
-    ├── schemaTypes/
-    │   ├── index.ts              # Exports all schema types
-    │   ├── documents/
-    │   │   ├── homePage.ts       # Singleton: intro, heroPhotos refs, sections
-    │   │   ├── homeSlide.ts      # One slide in the home hero
-    │   │   ├── post.ts           # Blog post
-    │   │   └── siteSettings.ts   # Singleton: title, tagline, avatar, socials, footer
-    │   └── objects/
-    │       └── socialLink.ts     # Social link sub-object
-    └── structure.ts              # Studio structure: Pages, Entries, Assets, Site Settings
-sanity.config.ts                  # Standalone Studio config
-sanity.cli.ts                     # Studio CLI config (project id / dataset)
-scripts/                          # One-off migration + audit scripts
-docs/studio-subdomain.md          # Vercel + DNS setup for standalone Studio
-```
+A guided tour of what's on the site.
 
-## Content model
+### Home
 
-| Doc type | Purpose |
+A photo slider of places I've been, with locations, dates, and short captions. Underneath the hero, a short bio and links out to everything else.
+
+### Blog
+
+Long-form writing across a few categories — Technology, Marketing, Sports, Integrations, and Software. The index is searchable, filterable by category, and sortable. Individual posts have rich text, images, code, and a clean reading layout.
+
+### Library
+
+A Goodreads-style shelf of what I'm reading, what's next, what I've finished, and a TBR pile. Completed books get star ratings, a short review, and a "More like this" suggestion section based on shared genres and authors. Books can be imported in one click in the Studio by searching Google Books — covers and metadata come over automatically.
+
+### Travel
+
+An interactive world map of every trip, with pins that cluster when zoomed out and expand when you click them. Each pin opens a popup with the trip summary; the table below auto-filters to show only the trips visible in the current map view (Airbnb-style). Filter by category (Personal / Family / Work) and year, sort by city, state, country, category, or dates. Each trip has its own page with dates, a write-up, a mini-map, a photo gallery, and links to any related blog posts.
+
+---
+
+## For developers
+
+### Stack at a glance
+
+| Layer | Choice |
 |---|---|
-| `siteSettings` | Site-wide singleton: site title, tagline, avatar, social links, footer text |
-| `homePage` | Home page singleton: intro paragraph, ordered hero photo refs, optional sections |
-| `homeSlide` | Individual slide in the home hero (image + location + date + caption) |
-| `post` | Blog post: title, slug, category, excerpt, cover, body (Portable Text), publishedAt, readTime, featured flag |
+| Framework | Next.js 16 (App Router, Turbopack) + React 19 |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 |
+| CMS | Sanity v5 (standalone Studio on a separate subdomain) |
+| Map | MapLibre GL JS + Carto Positron tiles (free, no API key) |
+| Geocoding | OpenStreetMap Nominatim (Studio location picker) |
+| Icons | Iconify (editor-picked icons for sidebar nav) |
+| Slider | Swiper |
+| Hosting | Vercel (one project for the site, one for Studio) |
+| Analytics | Google Tag Manager (opt-in via env var) |
 
-Studio is organized as:
-
-```
-Pages       → Home
-Entries     → Blog Posts          (future entry types slot here)
-Assets      → Home Sliders        (future asset types slot here)
-Site Settings
-```
-
-## Local development
+### Local development
 
 ```bash
 # Install
 npm install
 
-# Environment (copy and fill in)
-cp .env.local.example .env.local   # if you set one up; otherwise see "Env vars" below
-
-# Start the dev server
+# Public site (Next.js)
 npm run dev
 # → http://localhost:3000
 
-# Start Sanity Studio
+# Sanity Studio (separately, for content editing)
 npm run studio:dev
 # → http://localhost:3333
 ```
 
-### Env vars
+### Environment variables
 
-Create a `.env.local` with the keys below. Values aren't checked in — grab them from the Sanity project dashboard and the Vercel project settings.
+Copy from the Sanity project dashboard and Vercel project settings. `.env*` is gitignored — never commit values.
 
 | Variable | Required | Notes |
 |---|---|---|
 | `NEXT_PUBLIC_SANITY_PROJECT_ID` | yes | Sanity project ID |
 | `NEXT_PUBLIC_SANITY_DATASET` | yes | Sanity dataset name |
-| `NEXT_PUBLIC_SANITY_API_VERSION` | yes | Pin to today's date (e.g. `2026-05-21`) |
-| `SANITY_API_READ_TOKEN` | optional | Only needed for draft preview / authenticated reads |
-| `NEXT_PUBLIC_SANITY_STUDIO_URL` | optional | Public Studio URL. Defaults to `http://localhost:3333` in development and `https://studio.markurquhart.com` in production. |
-| `NEXT_PUBLIC_GTM_ID` | optional | Google Tag Manager ID. Leave unset locally so dev events don't fire; set in Vercel for production. |
+| `NEXT_PUBLIC_SANITY_API_VERSION` | yes | Pin to a recent date, e.g. `2026-05-30` |
+| `SANITY_API_READ_TOKEN` | optional | Draft preview / authenticated reads |
+| `NEXT_PUBLIC_SANITY_STUDIO_URL` | optional | Defaults: `http://localhost:3333` in dev, `https://studio.markurquhart.com` in prod |
+| `NEXT_PUBLIC_GTM_ID` | optional | GTM ID — leave unset in dev so test events don't fire |
+| `SANITY_TOKEN` | optional | Write token, only needed when running migration scripts |
 
-`.env*` files are gitignored — never commit them.
+### Project layout
 
-## Common tasks
-
-### Edit content
-
-Open `http://localhost:3333` locally or `https://studio.markurquhart.com` in production, then sign in with the Sanity account that owns the project.
-
-### Add a new asset or entry type
-
-1. Create the schema file: `src/sanity/schemaTypes/documents/<name>.ts`
-2. Add to `src/sanity/schemaTypes/index.ts` (import + add to `types` array)
-3. Add to `src/sanity/structure.ts` under the right parent (Entries or Assets) — there are commented examples already
-4. Deploy schema: `npm run schema:deploy`
-5. Commit + push → Vercel redeploys
-
-### Deploy the schema to Sanity
-
-```bash
-npm run schema:deploy
+```
+src/
+├── app/
+│   ├── page.tsx                    # Home
+│   ├── blog/                       # Index + post detail
+│   ├── library/                    # Books index + book detail
+│   ├── travel/                     # Trips index + trip detail
+│   ├── studio/                     # Embedded Studio fallback (prod redirects to subdomain)
+│   ├── api/                        # Cover-image proxy, Studio redirect helpers
+│   ├── layout.tsx                  # Root layout + fonts + GTM
+│   └── globals.css                 # Tailwind entry + small overrides
+├── components/                     # All UI — PageShell, NavSidebar, BookListItem,
+│                                   # TripCard, TripTable, TravelMap, etc.
+├── lib/                            # Shared non-UI helpers
+│                                   # (navLink, navIcon, tripCategory)
+└── sanity/
+    ├── env.ts                      # Project / dataset / API version
+    ├── lib/                        # client, live, image, queries, types
+    ├── components/                 # Custom Studio inputs (see below)
+    ├── schemaTypes/
+    │   ├── documents/              # Doc-type schemas (see Content model)
+    │   ├── objects/                # navLink, siteNavigation
+    │   └── constants/              # Shared lookup tables
+    └── structure.ts                # Studio sidebar structure
+sanity.config.ts                    # Standalone Studio config
+sanity.cli.ts                       # Studio CLI config
+scripts/                            # Migration + Playwright audit scripts
+docs/                               # Operational docs (Studio cutover, etc.)
 ```
 
-This uploads the schema to the Sanity Content Lake so the MCP tools and validation know about it.
+### Content model
 
-### Build the standalone Studio
+| Type | Kind | Purpose |
+|---|---|---|
+| `siteSettings` | singleton | Title, tagline, avatar, footer text, and sidebar navigation (with Iconify-picked icons) |
+| `homePage` | singleton | Intro paragraph + ordered references to hero slides |
+| `homeSlide` | asset | One slide in the home hero (image, location, date, caption) |
+| `post` | entry | Blog post (title, slug, category, excerpt, cover, Portable Text body, etc.) |
+| `book` | entry | A book with status, kind, genres, rating, favorite flag, summary, Portable Text review, external links |
+| `trip` | entry | A trip with geopoint location, city/state/country, dates, category, summary, Portable Text body, photo refs, related post refs |
+| `tripPhoto` | asset | A photo attached to a trip (image, caption, date, location) |
 
-```bash
-npm run studio:build
+The Studio is grouped:
+
+```
+Pages          → Home
+Entries        → Blog Posts, Books, Trips
+Assets         → Home Sliders, Trip Photos
+Site Settings  → Singleton
 ```
 
-This outputs a static Studio build into `studio-static/` for a dedicated Vercel project.
+### Custom Studio inputs
 
-### Generate TypeScript types (not yet wired)
+Live under `src/sanity/components/`:
 
-```bash
-npm run typegen   # currently a placeholder; types.ts is hand-rolled
-```
+| Input | Field | What it does |
+|---|---|---|
+| `BookCoverInput` | `book.cover` | Search Google Books / Open Library / upload — one-click cover import via the Vercel-hosted CORS proxy |
+| `BookImportAction` / `BookImportDialog` | document action | Bulk-create books from a Google Books search |
+| `LocationPickerInput` | `trip.location` | MapLibre map with click-to-drop pin, drag-to-refine, and Nominatim place search |
+| `NavIconifyInput` | `navLink.icon` | Iconify icon picker for sidebar nav links |
 
-## Scripts in `/scripts`
+### Common tasks
 
-One-off migration and audit utilities. They expect `SANITY_TOKEN` (write token) in the env.
-
-| Script | Purpose |
+| Task | How |
 |---|---|
-| `import-from-webflow.mjs` | Initial import: pulled avatar + 7 hero photos from Webflow CDN, seeded `siteSettings` |
-| `import-blog.mjs` | Scraped 17 blog posts from prod Webflow (title, category, cover, excerpt, date, read time) |
-| `migrate-to-homepage.mjs` | Moved bio from `siteSettings` → new `homePage.intro`; created hero photo refs |
-| `migrate-photo-to-homeslide.mjs` | Renamed `photo` doc type → `homeSlide`; re-created docs and repointed refs |
-| `cleanup-photo-migration.mjs` | Cleanup pass for the above (discarded stale drafts, deleted orphans) |
-| `audit.mjs`, `audit-blog.mjs`, `audit2.mjs` | Playwright screenshot diffs across viewports |
-| `inspect-slider.mjs`, `check-divider.mjs` | Headless DOM measurements while debugging layout |
+| Edit content | Open Studio (local or prod) and sign in |
+| Add a new doc type | Add `src/sanity/schemaTypes/documents/<name>.ts`, register it in `index.ts`, add to `structure.ts`, then `npm run schema:deploy` |
+| Deploy schema | `npm run schema:deploy` |
+| Build standalone Studio | `npm run studio:build` (outputs `studio-static/`) |
+| Generate types | `npm run typegen` (placeholder — types are still hand-rolled in `src/sanity/lib/types.ts`) |
+| Run a Playwright audit | `node scripts/audit-<name>.mjs` against a local `npm run dev` server |
 
-## Responsive layout
+### Scripts
 
-- **≥ 1280px:** Two-column. Fixed 280px sidebar on the left (avatar, name, bio, nav groups, copyright), full-viewport-height divider line, content takes the remaining space.
-- **< 1280px:** Single column. Sticky header with `Mark.` + hamburger, inline profile section, edge-to-edge slider, centered footer copyright. The hamburger opens a slide-in nav with the same group structure as desktop.
+All scripts live in `scripts/` and expect `SANITY_TOKEN` (write token) plus the Sanity env vars when they touch content.
 
-The `lg:` breakpoint was deliberately swapped for `xl:` (1280px) — the sidebar at 1024–1279px was too cramped to look right.
+**Imports** — one-shots from the old Webflow site:
+- `import-from-webflow.mjs` — avatar + 7 hero photos, seeded `siteSettings`
+- `import-blog.mjs` — 17 blog posts (title, category, cover, excerpt, date, read time)
 
-## Deploy
+**Migrations** — schema/content moves:
+- `migrate-to-homepage.mjs` — bio from `siteSettings` → `homePage.intro`, created hero photo refs
+- `migrate-photo-to-homeslide.mjs` — renamed `photo` doc type → `homeSlide`
+- `cleanup-photo-migration.mjs` — discarded stale drafts, deleted orphans from the above
+- `migrate-nav-groups.mjs` / `migrate-nav-iconify.mjs` — moved nav to grouped, Iconify-icon links
+- `remove-book-history.mjs` — pruned a deprecated book sub-field
 
-### Public site
+**Audits** — Playwright screenshots / DOM inspections for regression checking:
+- `audit.mjs`, `audit2.mjs` — home page across viewports
+- `audit-blog.mjs`, `audit-book.mjs` — blog and library detail pages
+- `audit-travel.mjs`, `audit-popup.mjs`, `audit-popup-positions.mjs`, `audit-cluster.mjs`, `audit-bounds.mjs` — travel map flow (pins, popups, clustering, viewport sync)
+- `inspect-slider.mjs`, `check-divider.mjs`, `debug-popup.mjs` — ad-hoc debug helpers
 
-Vercel auto-deploys from `main`. Build command is the default `next build`.
+### Responsive layout
 
-After deploying:
+- **≥ 1280px (`xl:`):** Two-column. Fixed 280px sidebar (avatar, name, bio, nav, copyright), full-viewport-height divider, content takes the rest.
+- **< 1280px:** Single column. Sticky header with logo + hamburger, inline profile, edge-to-edge sliders, slide-in nav drawer.
 
-1. Add the production URL to **Sanity CORS** (`https://sanity.io/manage` → API → CORS)
-2. Custom domain via **Vercel** → Settings → Domains → `markurquhart.com`
+The `lg:` breakpoint was deliberately swapped for `xl:` — the sidebar at 1024–1279px was too cramped.
 
-### Standalone Studio
+### Deploy
 
-Create a second Vercel project from the same repo with:
+Two Vercel projects from the same repo:
 
-1. **Framework preset:** Other
-2. **Root directory:** repo root
-3. **Build command:** `npm run studio:build`
-4. **Output directory:** `studio-static`
-5. **Install command:** `npm install`
-6. **Domain:** `studio.markurquhart.com`
+**Public site** — default `next build`, auto-deploys from `main`. Custom domain `markurquhart.com`.
 
-Then:
+**Standalone Studio** — Framework preset "Other", build `npm run studio:build`, output `studio-static`, install `npm install`. Custom domain `studio.markurquhart.com`. Set `NEXT_PUBLIC_SANITY_*` env vars on this project too.
 
-1. Add `https://studio.markurquhart.com` to **Sanity CORS**
-2. Set `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`, and `NEXT_PUBLIC_SANITY_API_VERSION` in the Studio Vercel project
-3. Set `NEXT_PUBLIC_SANITY_STUDIO_URL=https://studio.markurquhart.com` in the public-site Vercel project
-4. Verify that `/studio` on the public site redirects to the new subdomain
+After either deploys:
+1. Add the URL to **Sanity CORS** (`https://sanity.io/manage` → API → CORS)
+2. Set `NEXT_PUBLIC_SANITY_STUDIO_URL=https://studio.markurquhart.com` on the public-site project so `/studio` redirects properly
 
-See [`docs/studio-subdomain.md`](./docs/studio-subdomain.md) for the full cutover checklist.
+Full cutover details: [`docs/studio-subdomain.md`](./docs/studio-subdomain.md).
 
-## Working on this codebase
+### Conventions
 
-See [`AGENTS.md`](./AGENTS.md) for the layout, responsive, schema, and analytics rules. These are loaded automatically into Claude Code / Cursor sessions on this repo and act as the canonical guide for any new component, section, or page. Read it first before adding anything.
-
-## Credits
-
-Original design lifted from the prior Webflow site to ease the transition.
+See [`AGENTS.md`](./AGENTS.md) for the layout, responsive, schema, analytics, and migration-script rules. It's loaded automatically into Claude Code / Cursor sessions on this repo and is the canonical guide before adding any new component, section, page, or doc type.
