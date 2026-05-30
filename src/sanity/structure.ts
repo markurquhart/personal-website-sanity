@@ -1,4 +1,9 @@
-import { BookIcon, DocumentsIcon, ImagesIcon } from "@sanity/icons";
+import {
+  BookIcon,
+  DocumentsIcon,
+  EarthGlobeIcon,
+  ImagesIcon,
+} from "@sanity/icons";
 import type { StructureBuilder, StructureResolver } from "sanity/structure";
 
 import { BOOK_STATUSES } from "./schemaTypes/documents/book";
@@ -76,6 +81,9 @@ export const structure: StructureResolver = (S) =>
                       S.documentTypeListItem("book").title("All Books"),
                     ]),
                 ),
+              S.documentTypeListItem("trip")
+                .title("Trips")
+                .icon(EarthGlobeIcon),
               // Future entry types go here, e.g.:
               // S.documentTypeListItem("place").title("Places"),
               // S.documentTypeListItem("project").title("Projects"),
@@ -90,6 +98,7 @@ export const structure: StructureResolver = (S) =>
             .title("Assets")
             .items([
               S.documentTypeListItem("homeSlide").title("Home Sliders"),
+              S.documentTypeListItem("tripPhoto").title("Trip Photos"),
               // Future asset types go here, e.g.:
               // S.documentTypeListItem("headshot").title("Headshots"),
               // S.documentTypeListItem("projectPhoto").title("Project Photos"),

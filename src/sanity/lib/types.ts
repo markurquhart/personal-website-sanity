@@ -116,3 +116,42 @@ export type Book = BookSummary & {
   review?: PortableTextBlock[] | null;
   externalLinks?: { label: string; url: string }[] | null;
 };
+
+export type TripCategory = "personal" | "family" | "work";
+
+export type Geopoint = {
+  _type?: "geopoint";
+  lat: number;
+  lng: number;
+  alt?: number;
+};
+
+export type TripPhoto = {
+  _id: string;
+  caption?: string | null;
+  takenAt?: string | null;
+  location?: string | null;
+  image?: SanityImageAsset | null;
+};
+
+export type TripSummary = {
+  _id: string;
+  title?: string | null;
+  slug?: string | null;
+  category?: TripCategory | null;
+  cover?: SanityImageAsset | null;
+  location?: Geopoint | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  summary?: string | null;
+};
+
+export type Trip = TripSummary & {
+  body?: PortableTextBlock[] | null;
+  relatedPosts?: PostSummary[] | null;
+  photos?: TripPhoto[] | null;
+  externalLinks?: { label: string; url: string }[] | null;
+};

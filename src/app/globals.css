@@ -65,3 +65,42 @@ a {
   opacity: 0.9;
   transition: opacity 0.25s;
 }
+
+/* MapLibre trip popup — matches Library card aesthetic */
+.trip-popup-wrapper .maplibregl-popup-content {
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid #ebe9e3;
+  box-shadow: 0 18px 38px -24px rgba(17, 24, 39, 0.22);
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+}
+.trip-popup-wrapper .maplibregl-popup-tip {
+  border-top-color: #fff;
+  border-bottom-color: #fff;
+}
+
+/* Trip pin hover halo pulse */
+@keyframes trip-pin-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* MapLibre control buttons — match the rest of the borders */
+.maplibregl-ctrl-group {
+  border-radius: 10px !important;
+  box-shadow: 0 6px 18px -14px rgba(17, 24, 39, 0.2) !important;
+  border: 1px solid #ebebeb !important;
+  overflow: hidden;
+}
+.maplibregl-ctrl-group button {
+  background-color: #fff !important;
+}
+.maplibregl-ctrl-group button:hover {
+  background-color: #f4f3ef !important;
+}

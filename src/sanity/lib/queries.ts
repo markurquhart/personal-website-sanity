@@ -155,3 +155,79 @@ export const BOOK_QUERY = defineQuery(`
 export const BOOK_SLUGS_QUERY = defineQuery(`
   *[_type == "book" && defined(slug.current)]{ "slug": slug.current }
 `);
+
+export const TRIPS_QUERY = defineQuery(`
+  *[_type == "trip" && defined(slug.current)] | order(startedAt desc){
+    _id,
+    title,
+    "slug": slug.current,
+    category,
+    city,
+    state,
+    country,
+    startedAt,
+    endedAt,
+    summary,
+    location,
+    cover{
+      asset->{ _id, url, metadata { lqip, dimensions } },
+      alt
+    }
+  }
+`);
+
+export const TRIP_QUERY = defineQuery(`
+  *[_type == "trip" && slug.current == $slug][0]{
+    _id,
+    title,
+    "slug": slug.current,
+    category,
+    city,
+    state,
+    country,
+    startedAt,
+    endedAt,
+    summary,
+    location,
+    cover{
+      asset->{ _id, url, metadata { lqip, dimensions } },
+      alt
+    },
+    body[]{
+      ...,
+      _type == "image" => {
+        asset->{ _id, url, metadata { lqip, dimensions } },
+        alt,
+        caption
+      }
+    },
+    "relatedPosts": relatedPosts[]->{
+      _id,
+      title,
+      "slug": slug.current,
+      excerpt,
+      publishedAt,
+      category,
+      readTime,
+      coverImage{
+        asset->{ _id, url, metadata { lqip } },
+        alt
+      }
+    },
+    "photos": photos[]->{
+      _id,
+      caption,
+      takenAt,
+      location,
+      image{
+        asset->{ _id, url, metadata { lqip, dimensions } },
+        alt
+      }
+    },
+    externalLinks[]{ label, url }
+  }
+`);
+
+export const TRIP_SLUGS_QUERY = defineQuery(`
+  *[_type == "trip" && defined(slug.current)]{ "slug": slug.current }
+`);
