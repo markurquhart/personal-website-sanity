@@ -140,6 +140,10 @@ export function TravelIndex({ trips }: { trips: TripSummary[] }) {
     return sorted.filter((trip) => isInBounds(trip, bounds));
   }, [sorted, bounds]);
 
+  // Counts reflect trips that are inside the current map viewport
+  // (intersected with the year filter). Category filter is intentionally
+  // NOT applied so that switching categories shows their true viewport
+  // counts.
   const counts: Record<CategoryKey, number> = useMemo(() => {
     const yearFiltered =
       year === "all"
@@ -149,13 +153,16 @@ export function TravelIndex({ trips }: { trips: TripSummary[] }) {
               t.startedAt &&
               String(new Date(t.startedAt).getFullYear()) === year,
           );
+    const inBoundsBase = bounds
+      ? yearFiltered.filter((t) => isInBounds(t, bounds))
+      : yearFiltered;
     return {
-      all: yearFiltered.length,
-      personal: yearFiltered.filter((t) => t.category === "personal").length,
-      family: yearFiltered.filter((t) => t.category === "family").length,
-      work: yearFiltered.filter((t) => t.category === "work").length,
+      all: inBoundsBase.length,
+      personal: inBoundsBase.filter((t) => t.category === "personal").length,
+      family: inBoundsBase.filter((t) => t.category === "family").length,
+      work: inBoundsBase.filter((t) => t.category === "work").length,
     };
-  }, [trips, year]);
+  }, [trips, year, bounds]);
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
