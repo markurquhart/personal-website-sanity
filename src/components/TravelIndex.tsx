@@ -182,8 +182,6 @@ export function TravelIndex({ trips }: { trips: TripSummary[] }) {
     <div className="flex min-h-screen flex-col gap-8 px-5 py-[22px] pb-[60px] xl:px-0">
       <TravelHeader />
 
-      <TravelMap trips={sorted} onBoundsChange={setBounds} />
-
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e5e5e5] pb-3">
         <div className="flex flex-wrap gap-2">
           {CATEGORY_OPTIONS.map((option) => (
@@ -215,6 +213,8 @@ export function TravelIndex({ trips }: { trips: TripSummary[] }) {
           </label>
         )}
       </div>
+
+      <TravelMap trips={sorted} onBoundsChange={setBounds} />
 
       {sorted.length === 0 ? (
         <p className="text-[14px] text-[#888]">No trips match these filters.</p>
