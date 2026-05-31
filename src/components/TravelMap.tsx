@@ -303,6 +303,10 @@ export function TravelMap({
       center: [0, 20],
       zoom: 1.2,
       attributionControl: { compact: true },
+      // Don't hijack the page scroll. Requires ⌘/Ctrl + scroll to zoom,
+      // and shows a brief hint overlay if the user forgets. Two-finger
+      // pan/zoom on touch devices still works as expected.
+      cooperativeGestures: true,
     });
     mapRef.current = map;
 
